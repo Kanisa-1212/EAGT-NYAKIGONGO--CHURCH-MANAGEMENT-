@@ -1,0 +1,2 @@
+# EAGT-NYAKIGONGO--CHURCH-MANAGEMENT-
+Mfumo wa kusimamia Kanisa la EAGT NYAKIGONGO.

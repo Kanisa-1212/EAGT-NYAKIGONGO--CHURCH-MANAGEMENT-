@@ -135,6 +135,12 @@ export default function App() {
   const [selectedMemberId, setSelectedMemberId] = useState("");
   const [printReport, setPrintReport] = useState(null);
 
+  // Taarifa za mahudhurio ya washirika wote
+  const [attendanceDate, setAttendanceDate] = useState(today);
+  const [attendanceType, setAttendanceType] = useState("JUMAPILI");
+  const [attendanceChecks, setAttendanceChecks] = useState({});
+  const [attendanceSaving, setAttendanceSaving] = useState(false);
+
   const role = profile?.role;
   const pastor = role === "mchungaji";
   const secretary = role === "katibu";
@@ -219,6 +225,30 @@ export default function App() {
   useEffect(() => {
     if (user && profile) loadData();
   }, [user, profile]);
+
+  // Kusoma mahudhurio yaliyokwisha hifadhiwa kwa tarehe na ibada husika
+  useEffect(() => {
+    if (!Array.isArray(rows.members)) return;
+
+    const checks = {};
+
+    rows.members
+      .filter(member => member.is_active)
+      .forEach(member => {
+        checks[member.id] = false;
+      });
+
+    (rows.attendance || [])
+      .filter(item =>
+        item.service_date === attendanceDate &&
+        item.service_type === attendanceType
+      )
+      .forEach(item => {
+        checks[item.member_id] = item.attended === true;
+      });
+
+    setAttendanceChecks(checks);
+  }, [rows.members, rows.attendance, attendanceDate, attendanceType]);
 
   async function login(e) {
     e.preventDefault();
@@ -344,6 +374,81 @@ export default function App() {
     }
 
     alert("Taarifa imefutwa.");
+    await loadData();
+  }
+
+  // Kuhifadhi mahudhurio ya washirika wote kwa mara moja
+  async function saveAllAttendance() {
+    if (!pastor && !secretary) {
+      return alert("Huna ruhusa ya kuhifadhi mahudhurio.");
+    }
+
+    const members = (rows.members || []).filter(
+      member => member.is_active
+    );
+
+    if (!members.length) {
+      return alert("Hakuna washirika hai.");
+    }
+
+    if (!window.confirm(
+      "Unahifadhi mahudhurio ya washirika " +
+      members.length + " kwa tarehe " +
+      attendanceDate + " — " + attendanceType + "?"
+    )) {
+      return;
+    }
+
+    setAttendanceSaving(true);
+
+    const { data: existing, error: checkError } = await supabase
+      .from("attendance")
+      .select("id")
+      .eq("service_date", attendanceDate)
+      .eq("service_type", attendanceType);
+
+    if (checkError) {
+      setAttendanceSaving(false);
+      return alert("Hitilafu: " + checkError.message);
+    }
+
+    if (secretary && !pastor && (existing || []).length > 0) {
+      setAttendanceSaving(false);
+      return alert(
+        "Mahudhurio ya ibada hii tayari yamehifadhiwa. " +
+        "Mchungaji ndiye anayeruhusiwa kufanya marekebisho."
+      );
+    }
+
+    const records = members.map(member => ({
+      member_id: member.id,
+      service_date: attendanceDate,
+      service_type: attendanceType,
+      attended: attendanceChecks[member.id] === true
+    }));
+
+    let result;
+
+    if (pastor) {
+      result = await supabase
+        .from("attendance")
+        .upsert(records, {
+          onConflict: "member_id,service_date,service_type"
+        });
+    } else {
+      result = await supabase
+        .from("attendance")
+        .insert(records);
+    }
+
+    setAttendanceSaving(false);
+
+    if (result.error) {
+      return alert("Imeshindwa kuhifadhi mahudhurio: " + result.error.message);
+    }
+
+    alert("Mahudhurio yamehifadhiwa kikamilifu.");
+
     await loadData();
   }
 
@@ -567,6 +672,137 @@ export default function App() {
       headers: ["Na.", "Tarehe", "Aina ya ibada", "Hali ya mahudhurio"],
       rows: reportRows
     });
+  }
+
+  function renderAttendancePage() {
+    const members = (rows.members || [])
+      .filter(member => member.is_active)
+      .sort((a, b) =>
+        (a.full_name || "").localeCompare(b.full_name || "")
+      );
+
+    const presentCount = members.filter(
+      member => attendanceChecks[member.id] === true
+    ).length;
+
+    const absentCount = members.length - presentCount;
+
+    return (
+      <div className="attendance-page">
+        <h2>MAHUDHURIO YA WASHIRIKA</h2>
+
+        <label>
+          Tarehe ya ibada
+          <input
+            type="date"
+            value={attendanceDate}
+            onChange={e => setAttendanceDate(e.target.value)}
+          />
+        </label>
+
+        <label>
+          Aina ya ibada
+          <select
+            value={attendanceType}
+            onChange={e => setAttendanceType(e.target.value)}
+          >
+            {[
+              "JUMATANO",
+              "IJUMAA",
+              "MKESHA",
+              "JUMAPILI",
+              "IBADA KUU",
+              "MAOMBI",
+              "MAFUNDISHO YA BIBLIA",
+              "IBADA NYINGINE"
+            ].map(type => (
+              <option key={type} value={type}>
+                {type}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <div className="stats">
+          <article>
+            Washirika wote
+            <strong>{members.length}</strong>
+          </article>
+
+          <article>
+            Waliohudhuria
+            <strong>{presentCount}</strong>
+          </article>
+
+          <article>
+            Wasiokuwepo
+            <strong>{absentCount}</strong>
+          </article>
+        </div>
+
+        <h3>WEKA TIKI KWA WALIOHUDHURIA</h3>
+
+        <p>
+          Weka tiki kwenye kisanduku cha kila mshirika aliyefika ibadani.
+          Wasiowekwa tiki watahesabiwa kuwa hawakuhudhuria.
+        </p>
+
+        <div className="record-list">
+          {members.map((member, index) => (
+            <label
+              key={member.id}
+              className="record attendance-member"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "12px",
+                padding: "12px",
+                cursor: "pointer"
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={attendanceChecks[member.id] === true}
+                onChange={e =>
+                  setAttendanceChecks(previous => ({
+                    ...previous,
+                    [member.id]: e.target.checked
+                  }))
+                }
+                style={{
+                  width: "24px",
+                  height: "24px",
+                  flexShrink: 0
+                }}
+              />
+
+              <span>
+                {index + 1}. {member.full_name}
+                {member.member_number
+                  ? " — " + member.member_number
+                  : ""}
+              </span>
+            </label>
+          ))}
+
+          {!members.length && (
+            <p>Hakuna washirika hai waliopatikana.</p>
+          )}
+        </div>
+
+        {(pastor || secretary) && (
+          <button
+            type="button"
+            onClick={saveAllAttendance}
+            disabled={attendanceSaving || !members.length}
+          >
+            {attendanceSaving
+              ? "INAHIFADHI..."
+              : "HIFADHI MAHUDHURIO YOTE"}
+          </button>
+        )}
+      </div>
+    );
   }
 
   function renderFormPage() {
@@ -987,7 +1223,11 @@ export default function App() {
 
       <section>
         {tab === "dashboard" && renderDashboard()}
-        {configs[tab] && renderFormPage()}
+
+        {tab === "attendance"
+          ? renderAttendancePage()
+          : configs[tab] && renderFormPage()}
+
         {tab === "sms" && renderSMSPage()}
         {tab === "reports" && renderReports()}
       </section>

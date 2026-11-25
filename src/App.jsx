@@ -7,7 +7,7 @@ const today = new Date().toISOString().slice(0, 10);
 
 const pages = [
   ["dashboard", "Mwanzo"],
-  ["members", "Wanachama"],
+  ["members", "Washirika"],
   ["visitors", "Wageni"],
   ["departments", "Idara"],
   ["attendance", "Mahudhurio"],
@@ -19,10 +19,10 @@ const pages = [
 const configs = {
   members: {
     table: "members",
-    title: "Wanachama",
+    title: "Washirika",
     fields: [
       ["full_name", "Jina kamili", "text"],
-      ["member_number", "Namba ya mwanachama", "text"],
+      ["member_number", "Namba ya mshirika", "text"],
       ["phone", "Simu", "text"],
       ["gender", "Jinsia", "select", ["ME", "KE"]],
       ["date_of_birth", "Tarehe ya kuzaliwa", "date"],
@@ -31,7 +31,7 @@ const configs = {
       ["church_service", "Huduma kanisani", "text"],
       ["joined_on", "Tarehe ya kujiunga", "date"],
       ["position", "Wadhifa", "text"],
-      ["is_active", "Hali ya uanachama", "select", ["true", "false"]]
+      ["is_active", "Hali ya ushirika", "select", ["true", "false"]]
     ]
   },
   visitors: {
@@ -58,7 +58,7 @@ const configs = {
     table: "attendance",
     title: "Mahudhurio",
     fields: [
-      ["member_id", "Mwanachama", "member"],
+      ["member_id", "Mshirika", "member"],
       ["service_date", "Tarehe ya ibada", "date"],
       ["service_type", "Aina ya ibada", "select", [
         "JUMATANO", "IJUMAA", "MKESHA", "JUMAPILI",
@@ -285,7 +285,7 @@ export default function App() {
     });
 
     if (tab === "members" && !payload.full_name) {
-      return alert("Tafadhali andika jina la mwanachama.");
+      return alert("Tafadhali andika jina la mshirika.");
     }
 
     setLoading(true);
@@ -359,11 +359,11 @@ export default function App() {
     );
 
     if (!members.length) {
-      return alert("Hakuna wanachama hai wenye namba za simu.");
+      return alert("Hakuna washirika hai wenye namba za simu.");
     }
 
     if (!window.confirm(
-      "Unataka kutuma ujumbe kwa wanachama " + members.length + "?"
+      "Unataka kutuma ujumbe kwa washirika " + members.length + "?"
     )) {
       return;
     }
@@ -410,8 +410,6 @@ export default function App() {
     await loadData();
   }
 
-  // Sehemu hii inarudisha fomu bila kuunda upya
-  // component ya input kila herufi inapoandikwa.
   function renderField(field) {
     const [key, label, type, options] = field;
     const value = draft[key] ?? "";
@@ -438,7 +436,7 @@ export default function App() {
             required
             onChange={e => updateField(key, e.target.value)}
           >
-            <option value="">Chagua mwanachama</option>
+            <option value="">Chagua mshirika</option>
 
             {(rows.members || [])
               .filter(member => member.is_active)
@@ -514,7 +512,7 @@ export default function App() {
     ]);
 
     printNow({
-      title: "ORODHA YA WANACHAMA",
+      title: "ORODHA YA WASHIRIKA",
       subtitle: "EAGT NYAKIGONGO",
       headers: [
         "Na.",
@@ -535,7 +533,7 @@ export default function App() {
     );
 
     if (!member) {
-      return alert("Tafadhali chagua mwanachama kwanza.");
+      return alert("Tafadhali chagua mshirika kwanza.");
     }
 
     const attendance = (rows.attendance || [])
@@ -545,7 +543,7 @@ export default function App() {
       );
 
     if (!attendance.length) {
-      return alert("Mwanachama huyu hana taarifa za mahudhurio.");
+      return alert("Mshirika huyu hana taarifa za mahudhurio.");
     }
 
     const attendedCount = attendance.filter(
@@ -591,7 +589,7 @@ export default function App() {
 
         {tab === "members" && (
           <button type="button" onClick={printMembersPDF}>
-            PAKUA PDF YA ORODHA YA WANACHAMA
+            PAKUA PDF YA ORODHA YA WASHIRIKA
           </button>
         )}
 
@@ -673,7 +671,7 @@ export default function App() {
 
         <div className="stats">
           <article>
-            Wanachama
+            Washirika
             <strong>{(rows.members || []).length}</strong>
           </article>
 
@@ -724,7 +722,7 @@ export default function App() {
         {pastor ? (
           <form onSubmit={sendSMS}>
             <p>
-              Ujumbe utatumwa kwa wanachama hai wenye namba za simu.
+              Ujumbe utatumwa kwa washirika hai wenye namba za simu.
             </p>
 
             <textarea
@@ -735,7 +733,7 @@ export default function App() {
             />
 
             <button disabled={smsBusy}>
-              {smsBusy ? "Inatuma..." : "TUMA SMS KWA WANACHAMA"}
+              {smsBusy ? "Inatuma..." : "TUMA SMS KWA WASHIRIKA"}
             </button>
           </form>
         ) : (
@@ -781,12 +779,12 @@ export default function App() {
 
         <div className="stats">
           <article>
-            Wanachama
+            Washirika
             <strong>{members.length}</strong>
           </article>
 
           <article>
-            Wanachama hai
+            Washirika hai
             <strong>{members.filter(m => m.is_active).length}</strong>
           </article>
 
@@ -811,12 +809,12 @@ export default function App() {
         <h3>PDF ya mahudhurio ya mshirika mmoja</h3>
 
         <label>
-          Chagua mwanachama
+          Chagua mshirika
           <select
             value={selectedMemberId}
             onChange={e => setSelectedMemberId(e.target.value)}
           >
-            <option value="">-- Chagua mwanachama --</option>
+            <option value="">-- Chagua mshirika --</option>
 
             {members
               .filter(member => member.is_active)
@@ -846,7 +844,7 @@ export default function App() {
         {filteredAttendance.map(item => (
           <p key={item.id}>
             {(members.find(m => m.id === item.member_id)?.full_name
-              || "Mwanachama")}
+              || "Mshirika")}
             {" — "}
             {item.service_date}
             {" — "}

@@ -60,10 +60,11 @@ const configs = {
     fields: [
       ["member_id", "Mwanachama", "member"],
       ["service_date", "Tarehe ya ibada", "date"],
-      ["service_type", "Aina ya ibada", "select",
-        ["JUMATANO", "IJUMAA", "MKESHA", "JUMAPILI",
-         "IBADA KUU", "MAOMBI", "MAFUNDISHO YA BIBLIA",
-         "IBADA NYINGINE"]],
+      ["service_type", "Aina ya ibada", "select", [
+        "JUMATANO", "IJUMAA", "MKESHA", "JUMAPILI",
+        "IBADA KUU", "MAOMBI", "MAFUNDISHO YA BIBLIA",
+        "IBADA NYINGINE"
+      ]],
       ["attended", "Amehudhuria", "select", ["true", "false"]]
     ]
   },
@@ -80,24 +81,40 @@ const configs = {
 
 const empty = {
   members: {
-    full_name: "", member_number: "", phone: "",
-    gender: "ME", date_of_birth: "", residence: "",
-    marital_status: "", church_service: "", joined_on: today,
-    position: "", is_active: "true"
+    full_name: "",
+    member_number: "",
+    phone: "",
+    gender: "ME",
+    date_of_birth: "",
+    residence: "",
+    marital_status: "",
+    church_service: "",
+    joined_on: today,
+    position: "",
+    is_active: "true"
   },
   visitors: {
-    full_name: "", phone: "", residence: "",
-    visit_date: today, notes: ""
+    full_name: "",
+    phone: "",
+    residence: "",
+    visit_date: today,
+    notes: ""
   },
   departments: {
-    name: "", description: "", is_active: "true"
+    name: "",
+    description: "",
+    is_active: "true"
   },
   attendance: {
-    member_id: "", service_date: today,
-    service_type: "JUMAPILI", attended: "true"
+    member_id: "",
+    service_date: today,
+    service_type: "JUMAPILI",
+    attended: "true"
   },
   events: {
-    event_name: "", event_date: today, description: ""
+    event_name: "",
+    event_date: today,
+    description: ""
   }
 };
 
@@ -115,6 +132,8 @@ export default function App() {
   const [message, setMessage] = useState("");
   const [smsBusy, setSmsBusy] = useState(false);
   const [reportDate, setReportDate] = useState("");
+  const [selectedMemberId, setSelectedMemberId] = useState("");
+  const [printReport, setPrintReport] = useState(null);
 
   const role = profile?.role;
   const pastor = role === "mchungaji";
@@ -163,25 +182,33 @@ export default function App() {
     setLoading(true);
 
     const tables = [
-      "members", "visitors", "departments",
-      "attendance", "church_events", "sms_history"
+      ["members", "created_at"],
+      ["visitors", "created_at"],
+      ["departments", "created_at"],
+      ["attendance", "created_at"],
+      ["church_events", "created_at"],
+      ["sms_history", "sent_at"]
     ];
 
     const results = await Promise.all(
-      tables.map(table =>
-        supabase.from(table).select("*").order("created_at", {
-          ascending: false
-        })
+      tables.map(([table, orderColumn]) =>
+        supabase
+          .from(table)
+          .select("*")
+          .order(orderColumn, { ascending: false })
       )
     );
 
     const next = {};
 
     results.forEach((result, index) => {
+      const table = tables[index][0];
+
       if (result.error) {
-        console.error(tables[index], result.error.message);
+        console.error(table, result.error.message);
+        next[table] = [];
       } else {
-        next[tables[index]] = result.data || [];
+        next[table] = result.data || [];
       }
     });
 
@@ -195,8 +222,10 @@ export default function App() {
 
   async function login(e) {
     e.preventDefault();
+
     const { error } = await supabase.auth.signInWithPassword({
-      email, password
+      email,
+      password
     });
 
     if (error) alert(error.message);
@@ -206,6 +235,7 @@ export default function App() {
     await supabase.auth.signOut();
     setUser(null);
     setProfile(null);
+    setRows({});
   }
 
   function startNew() {
@@ -215,11 +245,21 @@ export default function App() {
 
   function startEdit(row) {
     setEditing(row.id);
+
     const values = {};
+
     configs[tab].fields.forEach(([key]) => {
       values[key] = row[key] ?? "";
     });
+
     setDraft(values);
+  }
+
+  function updateField(key, value) {
+    setDraft(previous => ({
+      ...previous,
+      [key]: value
+    }));
   }
 
   async function saveRecord(e) {
@@ -240,8 +280,13 @@ export default function App() {
       }
 
       if (value === "") value = null;
+
       payload[key] = value;
     });
+
+    if (tab === "members" && !payload.full_name) {
+      return alert("Tafadhali andika jina la mwanachama.");
+    }
 
     setLoading(true);
 
@@ -273,6 +318,7 @@ export default function App() {
     alert("Taarifa imehifadhiwa.");
     setDraft({});
     setEditing(null);
+
     await loadData();
   }
 
@@ -281,7 +327,9 @@ export default function App() {
       return alert("Mchungaji pekee ndiye anayeruhusiwa kufuta.");
     }
 
-    if (!window.confirm("Una uhakika unataka kufuta taarifa hii?")) return;
+    if (!window.confirm("Una uhakika unataka kufuta taarifa hii?")) {
+      return;
+    }
 
     const config = configs[tab];
 
@@ -302,19 +350,26 @@ export default function App() {
   async function sendSMS(e) {
     e.preventDefault();
 
-    if (!pastor) return alert("Mchungaji pekee ndiye anayeruhusiwa kutuma SMS.");
+    if (!pastor) {
+      return alert("Mchungaji pekee ndiye anayeruhusiwa kutuma SMS.");
+    }
 
     const members = (rows.members || []).filter(
-      m => m.is_active && m.phone
+      member => member.is_active && member.phone
     );
 
-    if (!members.length) return alert("Hakuna wanachama wenye namba za simu.");
+    if (!members.length) {
+      return alert("Hakuna wanachama hai wenye namba za simu.");
+    }
 
     if (!window.confirm(
       "Unataka kutuma ujumbe kwa wanachama " + members.length + "?"
-    )) return;
+    )) {
+      return;
+    }
 
     setSmsBusy(true);
+
     let sent = 0;
     let failed = 0;
 
@@ -346,24 +401,29 @@ export default function App() {
 
     setSmsBusy(false);
     setMessage("");
-    alert("SMS zilizotumwa: " + sent + "\nZilizoshindwa: " + failed);
+
+    alert(
+      "SMS zilizotumwa: " + sent +
+      "\nZilizoshindwa: " + failed
+    );
+
     await loadData();
   }
 
-  function Field({ field }) {
+  // Sehemu hii inarudisha fomu bila kuunda upya
+  // component ya input kila herufi inapoandikwa.
+  function renderField(field) {
     const [key, label, type, options] = field;
     const value = draft[key] ?? "";
 
     if (type === "textarea") {
       return (
-        <label>
+        <label key={key}>
           {label}
           <textarea
             value={value}
             required={key === "event_name" || key === "full_name"}
-            onChange={e => setDraft({
-              ...draft, [key]: e.target.value
-            })}
+            onChange={e => updateField(key, e.target.value)}
           />
         </label>
       );
@@ -371,21 +431,22 @@ export default function App() {
 
     if (type === "member") {
       return (
-        <label>
+        <label key={key}>
           {label}
           <select
             value={value}
             required
-            onChange={e => setDraft({
-              ...draft, [key]: e.target.value
-            })}
+            onChange={e => updateField(key, e.target.value)}
           >
             <option value="">Chagua mwanachama</option>
-            {(rows.members || []).filter(m => m.is_active).map(m => (
-              <option key={m.id} value={m.id}>
-                {m.full_name}
-              </option>
-            ))}
+
+            {(rows.members || [])
+              .filter(member => member.is_active)
+              .map(member => (
+                <option key={member.id} value={member.id}>
+                  {member.full_name}
+                </option>
+              ))}
           </select>
         </label>
       );
@@ -393,16 +454,16 @@ export default function App() {
 
     if (type === "select") {
       return (
-        <label>
+        <label key={key}>
           {label}
           <select
             value={value}
-            onChange={e => setDraft({
-              ...draft, [key]: e.target.value
-            })}
+            onChange={e => updateField(key, e.target.value)}
           >
             {options.map(option => (
-              <option key={option} value={option}>{option}</option>
+              <option key={option} value={option}>
+                {option}
+              </option>
             ))}
           </select>
         </label>
@@ -410,22 +471,107 @@ export default function App() {
     }
 
     return (
-      <label>
+      <label key={key}>
         {label}
         <input
           type={type}
           value={value}
-          required={["full_name", "name", "event_name",
-            "member_id", "service_date", "event_date"].includes(key)}
-          onChange={e => setDraft({
-            ...draft, [key]: e.target.value
-          })}
+          required={[
+            "full_name",
+            "name",
+            "event_name",
+            "member_id",
+            "service_date",
+            "event_date"
+          ].includes(key)}
+          onChange={e => updateField(key, e.target.value)}
         />
       </label>
     );
   }
 
-  function FormPage() {
+  function printNow(report) {
+    setPrintReport(report);
+
+    setTimeout(() => {
+      window.print();
+    }, 500);
+  }
+
+  function printMembersPDF() {
+    const members = [...(rows.members || [])].sort((a, b) =>
+      (a.full_name || "").localeCompare(b.full_name || "")
+    );
+
+    const reportRows = members.map((member, index) => [
+      index + 1,
+      member.member_number || "—",
+      member.full_name || "—",
+      member.gender || "—",
+      member.phone || "—",
+      member.residence || "—",
+      member.is_active ? "Hai" : "Hajat"
+    ]);
+
+    printNow({
+      title: "ORODHA YA WANACHAMA",
+      subtitle: "EAGT NYAKIGONGO",
+      headers: [
+        "Na.",
+        "Namba",
+        "Jina kamili",
+        "Jinsia",
+        "Simu",
+        "Makazi",
+        "Hali"
+      ],
+      rows: reportRows
+    });
+  }
+
+  function printIndividualAttendance() {
+    const member = (rows.members || []).find(
+      item => item.id === selectedMemberId
+    );
+
+    if (!member) {
+      return alert("Tafadhali chagua mwanachama kwanza.");
+    }
+
+    const attendance = (rows.attendance || [])
+      .filter(item => item.member_id === member.id)
+      .sort((a, b) =>
+        (b.service_date || "").localeCompare(a.service_date || "")
+      );
+
+    if (!attendance.length) {
+      return alert("Mwanachama huyu hana taarifa za mahudhurio.");
+    }
+
+    const attendedCount = attendance.filter(
+      item => item.attended === true
+    ).length;
+
+    const reportRows = attendance.map((item, index) => [
+      index + 1,
+      item.service_date || "—",
+      item.service_type || "—",
+      item.attended ? "Amehudhuria" : "Hakuhudhuria"
+    ]);
+
+    printNow({
+      title: "TAARIFA BINAFSI YA MAHUDHURIO",
+      subtitle:
+        "Jina: " + member.full_name +
+        " | Namba: " + (member.member_number || "—") +
+        " | Amehudhuria: " + attendedCount +
+        " | Hakuhudhuria: " + (attendance.length - attendedCount),
+      headers: ["Na.", "Tarehe", "Aina ya ibada", "Hali ya mahudhurio"],
+      rows: reportRows
+    });
+  }
+
+  function renderFormPage() {
     const config = configs[tab];
     const data = rows[config.table] || [];
 
@@ -443,21 +589,37 @@ export default function App() {
           onChange={e => setSearch(e.target.value)}
         />
 
-        {(pastor || secretary) && !editing && (
-          <button onClick={startNew}>+ Ongeza taarifa</button>
+        {tab === "members" && (
+          <button type="button" onClick={printMembersPDF}>
+            PAKUA PDF YA ORODHA YA WANACHAMA
+          </button>
         )}
 
-        {draft && Object.keys(draft).length > 0 && (
+        {(pastor || secretary) && !editing && (
+          <button type="button" onClick={startNew}>
+            + Ongeza taarifa
+          </button>
+        )}
+
+        {Object.keys(draft).length > 0 && (
           <form onSubmit={saveRecord} className="record-form">
             <h3>{editing ? "Hariri taarifa" : "Taarifa mpya"}</h3>
-            {config.fields.map(field => (
-              <Field key={field[0]} field={field} />
-            ))}
-            <button disabled={loading}>HIFADHI</button>
-            <button type="button" onClick={() => {
-              setDraft({});
-              setEditing(null);
-            }}>GHAIRI</button>
+
+            {config.fields.map(field => renderField(field))}
+
+            <button disabled={loading}>
+              {loading ? "Inahifadhi..." : "HIFADHI"}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setDraft({});
+                setEditing(null);
+              }}
+            >
+              GHAIRI
+            </button>
           </form>
         )}
 
@@ -469,100 +631,145 @@ export default function App() {
               {config.fields.map(([key, label]) => (
                 <p key={key}>
                   <strong>{label}:</strong>{" "}
+
                   {key === "member_id"
-                    ? (rows.members || []).find(m => m.id === row[key])?.full_name || "—"
-                    : String(row[key] ?? "—")}
+                    ? (rows.members || []).find(
+                        member => member.id === row[key]
+                      )?.full_name || "—"
+                    : key === "is_active"
+                      ? (row[key] ? "Hai" : "Haujafanya kazi")
+                      : key === "attended"
+                        ? (row[key] ? "Amehudhuria" : "Hakuhudhuria")
+                        : String(row[key] ?? "—")}
                 </p>
               ))}
 
               {pastor && (
                 <div className="actions">
-                  <button onClick={() => startEdit(row)}>Hariri</button>
-                  <button onClick={() => deleteRecord(row.id)}>Futa</button>
+                  <button onClick={() => startEdit(row)}>
+                    Hariri
+                  </button>
+
+                  <button onClick={() => deleteRecord(row.id)}>
+                    Futa
+                  </button>
                 </div>
               )}
             </article>
           ))}
-          {!filtered.length && <p>Hakuna taarifa zilizopatikana.</p>}
+
+          {!filtered.length && (
+            <p>Hakuna taarifa zilizopatikana.</p>
+          )}
         </div>
       </>
     );
   }
 
-  function Dashboard() {
+  function renderDashboard() {
     return (
       <>
         <h2>Muhtasari wa kanisa</h2>
+
         <div className="stats">
-          <article>Wanachama<strong>{(rows.members || []).length}</strong></article>
-          <article>Wageni<strong>{(rows.visitors || []).length}</strong></article>
-          <article>Idara<strong>{(rows.departments || []).length}</strong></article>
-          <article>Mahudhurio<strong>{(rows.attendance || []).length}</strong></article>
-          <article>Matukio<strong>{(rows.church_events || []).length}</strong></article>
+          <article>
+            Wanachama
+            <strong>{(rows.members || []).length}</strong>
+          </article>
+
+          <article>
+            Wageni
+            <strong>{(rows.visitors || []).length}</strong>
+          </article>
+
+          <article>
+            Idara
+            <strong>{(rows.departments || []).length}</strong>
+          </article>
+
+          <article>
+            Mahudhurio
+            <strong>{(rows.attendance || []).length}</strong>
+          </article>
+
+          <article>
+            Matukio
+            <strong>{(rows.church_events || []).length}</strong>
+          </article>
         </div>
+
         <h3>Matukio yajayo</h3>
+
         {(rows.church_events || [])
-          .filter(e => e.event_date >= today)
-          .sort((a, b) => a.event_date.localeCompare(b.event_date))
-          .map(e => (
-            <article className="record" key={e.id}>
-              <strong>{e.event_name}</strong>
-              <p>{e.event_date}</p>
-              <p>{e.description}</p>
+          .filter(event => event.event_date >= today)
+          .sort((a, b) =>
+            a.event_date.localeCompare(b.event_date)
+          )
+          .map(event => (
+            <article className="record" key={event.id}>
+              <strong>{event.event_name}</strong>
+              <p>{event.event_date}</p>
+              <p>{event.description}</p>
             </article>
           ))}
       </>
     );
   }
 
-  function SMSPage() {
+  function renderSMSPage() {
     return (
       <>
         <h2>Ujumbe wa SMS</h2>
 
         {pastor ? (
           <form onSubmit={sendSMS}>
-            <p>Ujumbe utatumwa kwa wanachama hai wenye namba za simu.</p>
+            <p>
+              Ujumbe utatumwa kwa wanachama hai wenye namba za simu.
+            </p>
+
             <textarea
               value={message}
               onChange={e => setMessage(e.target.value)}
               placeholder="Andika ujumbe wako hapa..."
               required
             />
+
             <button disabled={smsBusy}>
               {smsBusy ? "Inatuma..." : "TUMA SMS KWA WANACHAMA"}
             </button>
           </form>
         ) : (
-          <p>Ni Mchungaji pekee anayeruhusiwa kutuma SMS.</p>
+          <p>Mchungaji pekee ndiye anayeruhusiwa kutuma SMS.</p>
         )}
 
         <h3>Historia ya SMS</h3>
-        {(rows.sms_history || []).map(s => (
-          <article className="record" key={s.id}>
-            <p>{s.phone}</p>
-            <p>{s.message}</p>
-            <p>{s.status}</p>
-            <small>{s.sent_at}</small>
+
+        {(rows.sms_history || []).map(sms => (
+          <article className="record" key={sms.id}>
+            <p>{sms.phone}</p>
+            <p>{sms.message}</p>
+            <p>{sms.status}</p>
+            <small>{sms.sent_at}</small>
           </article>
         ))}
       </>
     );
   }
 
-  function Reports() {
+  function renderReports() {
     const members = rows.members || [];
     const visitors = rows.visitors || [];
     const attendance = rows.attendance || [];
     const events = rows.church_events || [];
 
-    const filteredAttendance = attendance.filter(a =>
-      !reportDate || a.service_date === reportDate
+    const filteredAttendance = attendance.filter(item =>
+      !reportDate || item.service_date === reportDate
     );
 
     return (
       <div className="reports">
         <h2>Ripoti za kanisa</h2>
+
         <label>
           Chagua tarehe ya mahudhurio
           <input
@@ -573,23 +780,88 @@ export default function App() {
         </label>
 
         <div className="stats">
-          <article>Wanachama<strong>{members.length}</strong></article>
-          <article>Wanachama hai<strong>{members.filter(m => m.is_active).length}</strong></article>
-          <article>Wageni<strong>{visitors.length}</strong></article>
-          <article>Mahudhurio<strong>{filteredAttendance.filter(a => a.attended).length}</strong></article>
-          <article>Matukio<strong>{events.length}</strong></article>
+          <article>
+            Wanachama
+            <strong>{members.length}</strong>
+          </article>
+
+          <article>
+            Wanachama hai
+            <strong>{members.filter(m => m.is_active).length}</strong>
+          </article>
+
+          <article>
+            Wageni
+            <strong>{visitors.length}</strong>
+          </article>
+
+          <article>
+            Mahudhurio
+            <strong>
+              {filteredAttendance.filter(a => a.attended).length}
+            </strong>
+          </article>
+
+          <article>
+            Matukio
+            <strong>{events.length}</strong>
+          </article>
         </div>
 
+        <h3>PDF ya mahudhurio ya mshirika mmoja</h3>
+
+        <label>
+          Chagua mwanachama
+          <select
+            value={selectedMemberId}
+            onChange={e => setSelectedMemberId(e.target.value)}
+          >
+            <option value="">-- Chagua mwanachama --</option>
+
+            {members
+              .filter(member => member.is_active)
+              .sort((a, b) =>
+                (a.full_name || "").localeCompare(b.full_name || "")
+              )
+              .map(member => (
+                <option key={member.id} value={member.id}>
+                  {member.full_name}
+                  {member.member_number
+                    ? " - " + member.member_number
+                    : ""}
+                </option>
+              ))}
+          </select>
+        </label>
+
+        <button
+          type="button"
+          onClick={printIndividualAttendance}
+        >
+          PAKUA PDF YA MAHUDHURIO YAKE
+        </button>
+
         <h3>Mahudhurio</h3>
-        {filteredAttendance.map(a => (
-          <p key={a.id}>
-            {(members.find(m => m.id === a.member_id)?.full_name || "Mwanachama")}
-            {" — "}{a.service_date} — {a.service_type}
-            {" — "}{a.attended ? "Amehudhuria" : "Hakuhudhuria"}
+
+        {filteredAttendance.map(item => (
+          <p key={item.id}>
+            {(members.find(m => m.id === item.member_id)?.full_name
+              || "Mwanachama")}
+            {" — "}
+            {item.service_date}
+            {" — "}
+            {item.service_type}
+            {" — "}
+            {item.attended ? "Amehudhuria" : "Hakuhudhuria"}
           </p>
         ))}
 
-        <button onClick={() => window.print()}>CHAPISHA RIPOTI</button>
+        <button
+          type="button"
+          onClick={() => window.print()}
+        >
+          CHAPISHA RIPOTI YA JUMLA
+        </button>
       </div>
     );
   }
@@ -599,6 +871,7 @@ export default function App() {
       <main className="login">
         <h1>EAGT NYAKIGONGO</h1>
         <h2>MFUMO WA USIMAMIZI WA KANISA</h2>
+
         <form onSubmit={login}>
           <input
             type="email"
@@ -607,6 +880,7 @@ export default function App() {
             onChange={e => setEmail(e.target.value)}
             required
           />
+
           <input
             type="password"
             placeholder="Nenosiri"
@@ -614,16 +888,81 @@ export default function App() {
             onChange={e => setPassword(e.target.value)}
             required
           />
+
           <button>INGIA</button>
         </form>
       </main>
     );
   }
 
-  if (!profile) return <p>Inapakia taarifa za mtumiaji...</p>;
+  if (!profile) {
+    return <p>Inapakia taarifa za mtumiaji...</p>;
+  }
 
   return (
     <main className="app">
+      <style>{`
+        .print-area {
+          display: none;
+        }
+
+        @media print {
+          body {
+            background: white !important;
+            color: black !important;
+          }
+
+          body * {
+            visibility: hidden !important;
+          }
+
+          .print-area,
+          .print-area * {
+            visibility: visible !important;
+          }
+
+          .print-area {
+            display: block !important;
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            padding: 20px;
+            background: white;
+            color: black;
+          }
+
+          .print-area h1,
+          .print-area h2,
+          .print-area p {
+            color: black !important;
+            text-align: center;
+          }
+
+          .print-area table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 11px;
+          }
+
+          .print-area th,
+          .print-area td {
+            border: 1px solid black !important;
+            padding: 7px;
+            color: black !important;
+          }
+
+          .print-area th {
+            background: #eee !important;
+          }
+
+          @page {
+            size: A4 landscape;
+            margin: 12mm;
+          }
+        }
+      `}</style>
+
       <header>
         <h1>EAGT NYAKIGONGO</h1>
         <p>MFUMO WA USIMAMIZI WA KANISA</p>
@@ -649,15 +988,48 @@ export default function App() {
       </nav>
 
       <section>
-        {tab === "dashboard" && <Dashboard />}
-        {configs[tab] && <FormPage />}
-        {tab === "sms" && <SMSPage />}
-        {tab === "reports" && <Reports />}
+        {tab === "dashboard" && renderDashboard()}
+        {configs[tab] && renderFormPage()}
+        {tab === "sms" && renderSMSPage()}
+        {tab === "reports" && renderReports()}
       </section>
 
       <footer>
         EAGT NYAKIGONGO © {new Date().getFullYear()}
       </footer>
+
+      {printReport && (
+        <div className="print-area">
+          <h1>EAGT NYAKIGONGO</h1>
+          <h2>{printReport.title}</h2>
+          <p>{printReport.subtitle}</p>
+          <p>Tarehe ya kutolewa: {today}</p>
+
+          <table>
+            <thead>
+              <tr>
+                {printReport.headers.map((header, index) => (
+                  <th key={index}>{header}</th>
+                ))}
+              </tr>
+            </thead>
+
+            <tbody>
+              {printReport.rows.map((row, index) => (
+                <tr key={index}>
+                  {row.map((cell, cellIndex) => (
+                    <td key={cellIndex}>{cell}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <p style={{ marginTop: "35px" }}>
+            Sahihi ya Mchungaji: __________________________
+          </p>
+        </div>
+      )}
     </main>
   );
 }

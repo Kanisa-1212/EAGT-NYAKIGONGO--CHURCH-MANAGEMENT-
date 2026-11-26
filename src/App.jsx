@@ -135,11 +135,16 @@ export default function App() {
   const [selectedMemberId, setSelectedMemberId] = useState("");
   const [printReport, setPrintReport] = useState(null);
 
-  // Taarifa za mahudhurio ya washirika wote
   const [attendanceDate, setAttendanceDate] = useState(today);
   const [attendanceType, setAttendanceType] = useState("JUMAPILI");
   const [attendanceChecks, setAttendanceChecks] = useState({});
   const [attendanceSaving, setAttendanceSaving] = useState(false);
+
+  // Usimamizi wa washirika wa idara
+  const [selectedDepartment, setSelectedDepartment] = useState(null);
+  const [departmentMemberIds, setDepartmentMemberIds] = useState([]);
+  const [departmentSearch, setDepartmentSearch] = useState("");
+  const [departmentSaving, setDepartmentSaving] = useState(false);
 
   const role = profile?.role;
   const pastor = role === "mchungaji";
@@ -191,18 +196,22 @@ export default function App() {
       ["members", "created_at"],
       ["visitors", "created_at"],
       ["departments", "created_at"],
+      ["member_departments", null],
       ["attendance", "created_at"],
       ["church_events", "created_at"],
       ["sms_history", "sent_at"]
     ];
 
     const results = await Promise.all(
-      tables.map(([table, orderColumn]) =>
-        supabase
-          .from(table)
-          .select("*")
-          .order(orderColumn, { ascending: false })
-      )
+      tables.map(([table, orderColumn]) => {
+        let query = supabase.from(table).select("*");
+
+        if (orderColumn) {
+          query = query.order(orderColumn, { ascending: false });
+        }
+
+        return query;
+      })
     );
 
     const next = {};
@@ -226,7 +235,7 @@ export default function App() {
     if (user && profile) loadData();
   }, [user, profile]);
 
-  // Kusoma mahudhurio yaliyokwisha hifadhiwa kwa tarehe na ibada husika
+  // Kusoma mahudhurio
   useEffect(() => {
     if (!Array.isArray(rows.members)) return;
 
@@ -377,7 +386,158 @@ export default function App() {
     await loadData();
   }
 
-  // Kuhifadhi mahudhurio ya washirika wote kwa mara moja
+  // ==========================================
+  // USAJILI WA WASHIRIKA KWENYE IDARA
+  // ==========================================
+
+  async function openDepartmentMembers(department) {
+    if (!pastor && !secretary) {
+      return alert("Huna ruhusa ya kusimamia washirika wa idara.");
+    }
+
+    setLoading(true);
+    setDepartmentSearch("");
+
+    const { data, error } = await supabase
+      .from("member_departments")
+      .select("member_id")
+      .eq("department_id", department.id);
+
+    setLoading(false);
+
+    if (error) {
+      alert("Imeshindwa kusoma washirika wa idara: " + error.message);
+      return;
+    }
+
+    setDepartmentMemberIds(
+      (data || []).map(item => item.member_id)
+    );
+
+    setSelectedDepartment(department);
+  }
+
+  function toggleDepartmentMember(memberId) {
+    setDepartmentMemberIds(previous =>
+      previous.includes(memberId)
+        ? previous.filter(id => id !== memberId)
+        : [...previous, memberId]
+    );
+  }
+
+  function toggleAllDepartmentMembers(members) {
+    const allSelected =
+      members.length > 0 &&
+      members.every(member =>
+        departmentMemberIds.includes(member.id)
+      );
+
+    if (allSelected) {
+      setDepartmentMemberIds(previous =>
+        previous.filter(
+          id => !members.some(member => member.id === id)
+        )
+      );
+    } else {
+      setDepartmentMemberIds(previous => [
+        ...new Set([
+          ...previous,
+          ...members.map(member => member.id)
+        ])
+      ]);
+    }
+  }
+
+  async function saveDepartmentMembers() {
+    if (!pastor && !secretary) {
+      return alert("Huna ruhusa ya kusajili washirika kwenye idara.");
+    }
+
+    if (!selectedDepartment || departmentSaving) return;
+
+    setDepartmentSaving(true);
+
+    const departmentId = selectedDepartment.id;
+
+    // Soma taarifa za sasa kutoka database
+    const { data: existing, error: readError } = await supabase
+      .from("member_departments")
+      .select("member_id")
+      .eq("department_id", departmentId);
+
+    if (readError) {
+      setDepartmentSaving(false);
+      return alert(
+        "Imeshindwa kusoma taarifa za idara: " + readError.message
+      );
+    }
+
+    const oldIds = (existing || []).map(item => item.member_id);
+
+    const toAdd = departmentMemberIds.filter(
+      id => !oldIds.includes(id)
+    );
+
+    const toRemove = oldIds.filter(
+      id => !departmentMemberIds.includes(id)
+    );
+
+    // Ongeza washirika wapya kwanza
+    if (toAdd.length > 0) {
+      const records = toAdd.map(memberId => ({
+        member_id: memberId,
+        department_id: departmentId
+      }));
+
+      const { error } = await supabase
+        .from("member_departments")
+        .insert(records);
+
+      if (error) {
+        setDepartmentSaving(false);
+        return alert(
+          "Imeshindwa kusajili washirika wapya: " + error.message
+        );
+      }
+    }
+
+    // Ondoa waliotolewa kwenye uchaguzi
+    if (toRemove.length > 0) {
+      const { error } = await supabase
+        .from("member_departments")
+        .delete()
+        .eq("department_id", departmentId)
+        .in("member_id", toRemove);
+
+      if (error) {
+        setDepartmentSaving(false);
+        await loadData();
+
+        return alert(
+          "Baadhi ya mabadiliko hayajakamilika: " + error.message
+        );
+      }
+    }
+
+    setDepartmentSaving(false);
+
+    alert(
+      "Washirika wa idara " +
+      selectedDepartment.name +
+      " wamehifadhiwa kikamilifu."
+    );
+
+    setSelectedDepartment(null);
+    setDepartmentMemberIds([]);
+    setDepartmentSearch("");
+
+    await loadData();
+  }
+
+  // ==========================================
+  // MAHUDHURIO
+  // ==========================================
+
   async function saveAllAttendance() {
     if (!pastor && !secretary) {
       return alert("Huna ruhusa ya kuhifadhi mahudhurio.");
@@ -444,13 +604,18 @@ export default function App() {
     setAttendanceSaving(false);
 
     if (result.error) {
-      return alert("Imeshindwa kuhifadhi mahudhurio: " + result.error.message);
+      return alert(
+        "Imeshindwa kuhifadhi mahudhurio: " + result.error.message
+      );
     }
 
     alert("Mahudhurio yamehifadhiwa kikamilifu.");
-
     await loadData();
   }
+
+  // ==========================================
+  // SMS
+  // ==========================================
 
   async function sendSMS(e) {
     e.preventDefault();
@@ -514,6 +679,10 @@ export default function App() {
 
     await loadData();
   }
+
+  // ==========================================
+  // FIELDS
+  // ==========================================
 
   function renderField(field) {
     const [key, label, type, options] = field;
@@ -592,6 +761,10 @@ export default function App() {
       </label>
     );
   }
+
+  // ==========================================
+  // PRINT NA RIPOTI
+  // ==========================================
 
   function printNow(report) {
     setPrintReport(report);
@@ -673,6 +846,10 @@ export default function App() {
       rows: reportRows
     });
   }
+
+  // ==========================================
+  // UKURASA WA MAHUDHURIO
+  // ==========================================
 
   function renderAttendancePage() {
     const members = (rows.members || [])
@@ -805,9 +982,140 @@ export default function App() {
     );
   }
 
+  // ==========================================
+  // UKURASA WA IDARA NA TAARIFA ZINGINE
+  // ==========================================
+
   function renderFormPage() {
     const config = configs[tab];
     const data = rows[config.table] || [];
+
+    // Orodha ya washirika wa idara iliyofunguliwa
+    if (tab === "departments" && selectedDepartment) {
+      const members = (rows.members || [])
+        .filter(member =>
+          member.is_active &&
+          (member.full_name || "")
+            .toLowerCase()
+            .includes(departmentSearch.toLowerCase())
+        )
+        .sort((a, b) =>
+          (a.full_name || "").localeCompare(b.full_name || "")
+        );
+
+      return (
+        <div>
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedDepartment(null);
+              setDepartmentMemberIds([]);
+              setDepartmentSearch("");
+            }}
+          >
+            ← RUDI KWENYE IDARA
+          </button>
+
+          <h2>{selectedDepartment.name}</h2>
+
+          <h3>SAJILI WASHIRIKA KWENYE IDARA HII</h3>
+
+          <p>
+            Chagua washirika unaotaka wawe wanachama wa idara hii.
+          </p>
+
+          <div className="stats">
+            <article>
+              Washirika waliochaguliwa
+              <strong>{departmentMemberIds.length}</strong>
+            </article>
+
+            <article>
+              Washirika wanaoonekana
+              <strong>{members.length}</strong>
+            </article>
+          </div>
+
+          <input
+            type="text"
+            placeholder="Tafuta mshirika kwa jina..."
+            value={departmentSearch}
+            onChange={e => setDepartmentSearch(e.target.value)}
+          />
+
+          <label
+            className="record"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "12px",
+              padding: "12px",
+              cursor: "pointer"
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={
+                members.length > 0 &&
+                members.every(member =>
+                  departmentMemberIds.includes(member.id)
+                )
+              }
+              onChange={() => toggleAllDepartmentMembers(members)}
+            />
+            <strong>CHAGUA WOTE WALIOONYESHWA</strong>
+          </label>
+
+          <div className="record-list">
+            {members.map((member, index) => (
+              <label
+                key={member.id}
+                className="record"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "12px",
+                  padding: "12px",
+                  cursor: "pointer"
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={departmentMemberIds.includes(member.id)}
+                  onChange={() => toggleDepartmentMember(member.id)}
+                  style={{
+                    width: "22px",
+                    height: "22px",
+                    flexShrink: 0
+                  }}
+                />
+
+                <span>
+                  {index + 1}. {member.full_name}
+                  {member.member_number
+                    ? " — " + member.member_number
+                    : ""}
+                </span>
+              </label>
+            ))}
+
+            {!members.length && (
+              <p>Hakuna washirika hai waliopatikana.</p>
+            )}
+          </div>
+
+          <button
+            type="button"
+            onClick={saveDepartmentMembers}
+            disabled={departmentSaving}
+          >
+            {departmentSaving
+              ? "INAHIFADHI..."
+              : "HIFADHI WASHIRIKA WALIOCHAGULIWA"}
+          </button>
+        </div>
+      );
+    }
 
     const filtered = data.filter(row =>
       JSON.stringify(row).toLowerCase().includes(search.toLowerCase())
@@ -862,29 +1170,61 @@ export default function App() {
         <div className="record-list">
           {filtered.map(row => (
             <article className="record" key={row.id}>
-              {config.fields.map(([key, label]) => (
-                <p key={key}>
-                  <strong>{label}:</strong>{" "}
+              {tab === "departments" ? (
+                <>
+                  <h3>{row.name}</h3>
 
-                  {key === "member_id"
-                    ? (rows.members || []).find(
-                        member => member.id === row[key]
-                      )?.full_name || "—"
-                    : key === "is_active"
-                      ? (row[key] ? "Hai" : "Haujafanya kazi")
-                      : key === "attended"
-                        ? (row[key] ? "Amehudhuria" : "Hakuhudhuria")
-                        : String(row[key] ?? "—")}
-                </p>
-              ))}
+                  <p>{row.description || "Hakuna maelezo."}</p>
+
+                  <p>
+                    Hali: {row.is_active ? "Hai" : "Haifanyi kazi"}
+                  </p>
+
+                  <button
+                    type="button"
+                    onClick={() => openDepartmentMembers(row)}
+                  >
+                    FUNGUA NA SAJILI WASHIRIKA
+                  </button>
+
+                  <p>
+                    Washirika waliosajiliwa:{" "}
+                    {(rows.member_departments || []).filter(
+                      item => item.department_id === row.id
+                    ).length}
+                  </p>
+                </>
+              ) : (
+                config.fields.map(([key, label]) => (
+                  <p key={key}>
+                    <strong>{label}:</strong>{" "}
+
+                    {key === "member_id"
+                      ? (rows.members || []).find(
+                          member => member.id === row[key]
+                        )?.full_name || "—"
+                      : key === "is_active"
+                        ? (row[key] ? "Hai" : "Haifanyi kazi")
+                        : key === "attended"
+                          ? (row[key] ? "Amehudhuria" : "Hakuhudhuria")
+                          : String(row[key] ?? "—")}
+                  </p>
+                ))
+              )}
 
               {pastor && (
                 <div className="actions">
-                  <button onClick={() => startEdit(row)}>
+                  <button
+                    type="button"
+                    onClick={() => startEdit(row)}
+                  >
                     Hariri
                   </button>
 
-                  <button onClick={() => deleteRecord(row.id)}>
+                  <button
+                    type="button"
+                    onClick={() => deleteRecord(row.id)}
+                  >
                     Futa
                   </button>
                 </div>
@@ -899,6 +1239,10 @@ export default function App() {
       </>
     );
   }
+
+  // ==========================================
+  // DASHBOARD
+  // ==========================================
 
   function renderDashboard() {
     return (
@@ -950,6 +1294,10 @@ export default function App() {
     );
   }
 
+  // ==========================================
+  // SMS
+  // ==========================================
+
   function renderSMSPage() {
     return (
       <>
@@ -989,6 +1337,10 @@ export default function App() {
       </>
     );
   }
+
+  // ==========================================
+  // RIPOTI
+  // ==========================================
 
   function renderReports() {
     const members = rows.members || [];
@@ -1100,6 +1452,10 @@ export default function App() {
     );
   }
 
+  // ==========================================
+  // LOGIN
+  // ==========================================
+
   if (!user) {
     return (
       <main className="login">
@@ -1132,6 +1488,10 @@ export default function App() {
   if (!profile) {
     return <p>Inapakia taarifa za mtumiaji...</p>;
   }
+
+  // ==========================================
+  // MWONEKANO MKUU
+  // ==========================================
 
   return (
     <main className="app">
@@ -1214,6 +1574,9 @@ export default function App() {
               setDraft({});
               setEditing(null);
               setSearch("");
+              setSelectedDepartment(null);
+              setDepartmentMemberIds([]);
+              setDepartmentSearch("");
             }}
           >
             {name}

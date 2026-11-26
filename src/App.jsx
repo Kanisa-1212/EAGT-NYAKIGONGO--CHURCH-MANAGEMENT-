@@ -16,6 +16,12 @@ const pages = [
   ["reports", "Ripoti"]
 ];
 
+const serviceTypes = [
+  "JUMATANO", "IJUMAA", "MKESHA", "JUMAPILI",
+  "IBADA KUU", "MAOMBI", "MAFUNDISHO YA BIBLIA",
+  "IBADA NYINGINE"
+];
+
 const configs = {
   members: {
     table: "members",
@@ -60,11 +66,7 @@ const configs = {
     fields: [
       ["member_id", "Mshirika", "member"],
       ["service_date", "Tarehe ya ibada", "date"],
-      ["service_type", "Aina ya ibada", "select", [
-        "JUMATANO", "IJUMAA", "MKESHA", "JUMAPILI",
-        "IBADA KUU", "MAOMBI", "MAFUNDISHO YA BIBLIA",
-        "IBADA NYINGINE"
-      ]],
+      ["service_type", "Aina ya ibada", "select", serviceTypes],
       ["attended", "Amehudhuria", "select", ["true", "false"]]
     ]
   },
@@ -140,7 +142,6 @@ export default function App() {
   const [attendanceChecks, setAttendanceChecks] = useState({});
   const [attendanceSaving, setAttendanceSaving] = useState(false);
 
-  // Usimamizi wa washirika wa idara
   const [selectedDepartment, setSelectedDepartment] = useState(null);
   const [departmentMemberIds, setDepartmentMemberIds] = useState([]);
   const [departmentSearch, setDepartmentSearch] = useState("");
@@ -205,11 +206,9 @@ export default function App() {
     const results = await Promise.all(
       tables.map(([table, orderColumn]) => {
         let query = supabase.from(table).select("*");
-
         if (orderColumn) {
           query = query.order(orderColumn, { ascending: false });
         }
-
         return query;
       })
     );
@@ -218,7 +217,6 @@ export default function App() {
 
     results.forEach((result, index) => {
       const table = tables[index][0];
-
       if (result.error) {
         console.error(table, result.error.message);
         next[table] = [];
@@ -235,7 +233,6 @@ export default function App() {
     if (user && profile) loadData();
   }, [user, profile]);
 
-  // Kusoma mahudhurio
   useEffect(() => {
     if (!Array.isArray(rows.members)) return;
 
@@ -284,7 +281,6 @@ export default function App() {
 
   function startEdit(row) {
     setEditing(row.id);
-
     const values = {};
 
     configs[tab].fields.forEach(([key]) => {
@@ -295,10 +291,7 @@ export default function App() {
   }
 
   function updateField(key, value) {
-    setDraft(previous => ({
-      ...previous,
-      [key]: value
-    }));
+    setDraft(previous => ({ ...previous, [key]: value }));
   }
 
   async function saveRecord(e) {
@@ -319,7 +312,6 @@ export default function App() {
       }
 
       if (value === "") value = null;
-
       payload[key] = value;
     });
 
@@ -328,7 +320,6 @@ export default function App() {
     }
 
     setLoading(true);
-
     let result;
 
     if (editing) {
@@ -342,9 +333,7 @@ export default function App() {
         .update(payload)
         .eq("id", editing);
     } else {
-      result = await supabase
-        .from(config.table)
-        .insert(payload);
+      result = await supabase.from(config.table).insert(payload);
     }
 
     setLoading(false);
@@ -357,7 +346,6 @@ export default function App() {
     alert("Taarifa imehifadhiwa.");
     setDraft({});
     setEditing(null);
-
     await loadData();
   }
 
@@ -366,12 +354,9 @@ export default function App() {
       return alert("Mchungaji pekee ndiye anayeruhusiwa kufuta.");
     }
 
-    if (!window.confirm("Una uhakika unataka kufuta taarifa hii?")) {
-      return;
-    }
+    if (!window.confirm("Una uhakika unataka kufuta taarifa hii?")) return;
 
     const config = configs[tab];
-
     const { error } = await supabase
       .from(config.table)
       .delete()
@@ -386,9 +371,7 @@ export default function App() {
     await loadData();
   }
 
-  // ==========================================
   // USAJILI WA WASHIRIKA KWENYE IDARA
-  // ==========================================
 
   async function openDepartmentMembers(department) {
     if (!pastor && !secretary) {
@@ -410,10 +393,7 @@ export default function App() {
       return;
     }
 
-    setDepartmentMemberIds(
-      (data || []).map(item => item.member_id)
-    );
-
+    setDepartmentMemberIds((data || []).map(item => item.member_id));
     setSelectedDepartment(department);
   }
 
@@ -428,22 +408,15 @@ export default function App() {
   function toggleAllDepartmentMembers(members) {
     const allSelected =
       members.length > 0 &&
-      members.every(member =>
-        departmentMemberIds.includes(member.id)
-      );
+      members.every(member => departmentMemberIds.includes(member.id));
 
     if (allSelected) {
       setDepartmentMemberIds(previous =>
-        previous.filter(
-          id => !members.some(member => member.id === id)
-        )
+        previous.filter(id => !members.some(member => member.id === id))
       );
     } else {
       setDepartmentMemberIds(previous => [
-        ...new Set([
-          ...previous,
-          ...members.map(member => member.id)
-        ])
+        ...new Set([...previous, ...members.map(member => member.id)])
       ]);
     }
   }
@@ -456,10 +429,8 @@ export default function App() {
     if (!selectedDepartment || departmentSaving) return;
 
     setDepartmentSaving(true);
-
     const departmentId = selectedDepartment.id;
 
-    // Soma taarifa za sasa kutoka database
     const { data: existing, error: readError } = await supabase
       .from("member_departments")
       .select("member_id")
@@ -467,22 +438,13 @@ export default function App() {
 
     if (readError) {
       setDepartmentSaving(false);
-      return alert(
-        "Imeshindwa kusoma taarifa za idara: " + readError.message
-      );
+      return alert("Imeshindwa kusoma taarifa za idara: " + readError.message);
     }
 
     const oldIds = (existing || []).map(item => item.member_id);
+    const toAdd = departmentMemberIds.filter(id => !oldIds.includes(id));
+    const toRemove = oldIds.filter(id => !departmentMemberIds.includes(id));
 
-    const toAdd = departmentMemberIds.filter(
-      id => !oldIds.includes(id)
-    );
-
-    const toRemove = oldIds.filter(
-      id => !departmentMemberIds.includes(id)
-    );
-
-    // Ongeza washirika wapya kwanza
     if (toAdd.length > 0) {
       const records = toAdd.map(memberId => ({
         member_id: memberId,
@@ -495,13 +457,10 @@ export default function App() {
 
       if (error) {
         setDepartmentSaving(false);
-        return alert(
-          "Imeshindwa kusajili washirika wapya: " + error.message
-        );
+        return alert("Imeshindwa kusajili washirika wapya: " + error.message);
       }
     }
 
-    // Ondoa waliotolewa kwenye uchaguzi
     if (toRemove.length > 0) {
       const { error } = await supabase
         .from("member_departments")
@@ -512,52 +471,34 @@ export default function App() {
       if (error) {
         setDepartmentSaving(false);
         await loadData();
-
-        return alert(
-          "Baadhi ya mabadiliko hayajakamilika: " + error.message
-        );
+        return alert("Baadhi ya mabadiliko hayajakamilika: " + error.message);
       }
     }
 
     setDepartmentSaving(false);
-
-    alert(
-      "Washirika wa idara " +
-      selectedDepartment.name +
-      " wamehifadhiwa kikamilifu."
-    );
+    alert("Washirika wa idara " + selectedDepartment.name + " wamehifadhiwa.");
 
     setSelectedDepartment(null);
     setDepartmentMemberIds([]);
     setDepartmentSearch("");
-
     await loadData();
   }
 
-  // ==========================================
   // MAHUDHURIO
-  // ==========================================
 
   async function saveAllAttendance() {
     if (!pastor && !secretary) {
       return alert("Huna ruhusa ya kuhifadhi mahudhurio.");
     }
 
-    const members = (rows.members || []).filter(
-      member => member.is_active
-    );
+    const members = (rows.members || []).filter(member => member.is_active);
 
-    if (!members.length) {
-      return alert("Hakuna washirika hai.");
-    }
+    if (!members.length) return alert("Hakuna washirika hai.");
 
     if (!window.confirm(
-      "Unahifadhi mahudhurio ya washirika " +
-      members.length + " kwa tarehe " +
-      attendanceDate + " — " + attendanceType + "?"
-    )) {
-      return;
-    }
+      "Unahifadhi mahudhurio ya washirika " + members.length +
+      " kwa tarehe " + attendanceDate + " — " + attendanceType + "?"
+    )) return;
 
     setAttendanceSaving(true);
 
@@ -590,32 +531,24 @@ export default function App() {
     let result;
 
     if (pastor) {
-      result = await supabase
-        .from("attendance")
-        .upsert(records, {
-          onConflict: "member_id,service_date,service_type"
-        });
+      result = await supabase.from("attendance").upsert(records, {
+        onConflict: "member_id,service_date,service_type"
+      });
     } else {
-      result = await supabase
-        .from("attendance")
-        .insert(records);
+      result = await supabase.from("attendance").insert(records);
     }
 
     setAttendanceSaving(false);
 
     if (result.error) {
-      return alert(
-        "Imeshindwa kuhifadhi mahudhurio: " + result.error.message
-      );
+      return alert("Imeshindwa kuhifadhi mahudhurio: " + result.error.message);
     }
 
     alert("Mahudhurio yamehifadhiwa kikamilifu.");
     await loadData();
   }
 
-  // ==========================================
   // SMS
-  // ==========================================
 
   async function sendSMS(e) {
     e.preventDefault();
@@ -632,23 +565,17 @@ export default function App() {
       return alert("Hakuna washirika hai wenye namba za simu.");
     }
 
-    if (!window.confirm(
-      "Unataka kutuma ujumbe kwa washirika " + members.length + "?"
-    )) {
+    if (!window.confirm("Unataka kutuma ujumbe kwa washirika " + members.length + "?")) {
       return;
     }
 
     setSmsBusy(true);
-
     let sent = 0;
     let failed = 0;
 
     for (const member of members) {
       const { error } = await supabase.functions.invoke("send-sms", {
-        body: {
-          phone: member.phone,
-          message
-        }
+        body: { phone: member.phone, message }
       });
 
       if (error) {
@@ -662,27 +589,18 @@ export default function App() {
         status: "sent"
       });
 
-      if (saved.error) {
-        failed++;
-      } else {
-        sent++;
-      }
+      if (saved.error) failed++;
+      else sent++;
     }
 
     setSmsBusy(false);
     setMessage("");
 
-    alert(
-      "SMS zilizotumwa: " + sent +
-      "\nZilizoshindwa: " + failed
-    );
-
+    alert("SMS zilizotumwa: " + sent + "\nZilizoshindwa: " + failed);
     await loadData();
   }
 
-  // ==========================================
   // FIELDS
-  // ==========================================
 
   function renderField(field) {
     const [key, label, type, options] = field;
@@ -705,20 +623,11 @@ export default function App() {
       return (
         <label key={key}>
           {label}
-          <select
-            value={value}
-            required
-            onChange={e => updateField(key, e.target.value)}
-          >
+          <select value={value} required onChange={e => updateField(key, e.target.value)}>
             <option value="">Chagua mshirika</option>
-
-            {(rows.members || [])
-              .filter(member => member.is_active)
-              .map(member => (
-                <option key={member.id} value={member.id}>
-                  {member.full_name}
-                </option>
-              ))}
+            {(rows.members || []).filter(member => member.is_active).map(member => (
+              <option key={member.id} value={member.id}>{member.full_name}</option>
+            ))}
           </select>
         </label>
       );
@@ -728,14 +637,9 @@ export default function App() {
       return (
         <label key={key}>
           {label}
-          <select
-            value={value}
-            onChange={e => updateField(key, e.target.value)}
-          >
+          <select value={value} onChange={e => updateField(key, e.target.value)}>
             {options.map(option => (
-              <option key={option} value={option}>
-                {option}
-              </option>
+              <option key={option} value={option}>{option}</option>
             ))}
           </select>
         </label>
@@ -749,12 +653,8 @@ export default function App() {
           type={type}
           value={value}
           required={[
-            "full_name",
-            "name",
-            "event_name",
-            "member_id",
-            "service_date",
-            "event_date"
+            "full_name", "name", "event_name", "member_id",
+            "service_date", "event_date"
           ].includes(key)}
           onChange={e => updateField(key, e.target.value)}
         />
@@ -762,46 +662,268 @@ export default function App() {
     );
   }
 
-  // ==========================================
-  // PRINT NA RIPOTI
-  // ==========================================
+  // RIPOTI NA PDF
 
   function printNow(report) {
     setPrintReport(report);
+    setTimeout(() => window.print(), 700);
+  }
 
-    setTimeout(() => {
-      window.print();
-    }, 500);
+  function makeSection(title, headers, rows) {
+    return { title, headers, rows };
+  }
+
+  function getMemberDepartmentReport() {
+    const members = rows.members || [];
+    const departments = rows.departments || [];
+    const links = rows.member_departments || [];
+    const reportRows = [];
+    let number = 1;
+
+    departments.forEach(department => {
+      const assignedIds = links
+        .filter(link => link.department_id === department.id)
+        .map(link => link.member_id);
+
+      const assignedMembers = members
+        .filter(member => assignedIds.includes(member.id))
+        .sort((a, b) => (a.full_name || "").localeCompare(b.full_name || ""));
+
+      if (assignedMembers.length === 0) {
+        reportRows.push([
+          department.name,
+          "Hakuna mshirika aliyesajiliwa",
+          "—",
+          "—",
+          "—"
+        ]);
+      } else {
+        assignedMembers.forEach(member => {
+          reportRows.push([
+            department.name,
+            number++,
+            member.full_name || "—",
+            member.member_number || "—",
+            member.phone || "—"
+          ]);
+        });
+      }
+    });
+
+    const assignedIds = new Set(links.map(link => link.member_id));
+    const unassigned = members
+      .filter(member => !assignedIds.has(member.id))
+      .sort((a, b) => (a.full_name || "").localeCompare(b.full_name || ""));
+
+    unassigned.forEach(member => {
+      reportRows.push([
+        "HAJAPANGIWA IDARA",
+        number++,
+        member.full_name || "—",
+        member.member_number || "—",
+        member.phone || "—"
+      ]);
+    });
+
+    return makeSection(
+      "ORODHA YA WASHIRIKA KWA IDARA",
+      ["Idara", "Na.", "Jina la mshirika", "Namba", "Simu"],
+      reportRows
+    );
+  }
+
+  function getVisitorsReport() {
+    const visitors = [...(rows.visitors || [])].sort((a, b) =>
+      (b.visit_date || "").localeCompare(a.visit_date || "")
+    );
+
+    return makeSection(
+      "ORODHA YA WAGENI",
+      ["Na.", "Jina kamili", "Simu", "Makazi", "Tarehe", "Maelezo"],
+      visitors.map((visitor, index) => [
+        index + 1,
+        visitor.full_name || "—",
+        visitor.phone || "—",
+        visitor.residence || "—",
+        visitor.visit_date || "—",
+        visitor.notes || "—"
+      ])
+    );
+  }
+
+  function getAttendanceReportSections() {
+    const attendance = rows.attendance || [];
+    const members = rows.members || [];
+
+    const filtered = attendance.filter(item =>
+      !reportDate || item.service_date === reportDate
+    );
+
+    const sessionsMap = new Map();
+
+    filtered.forEach(item => {
+      const key = item.service_date + "|" + item.service_type;
+      if (!sessionsMap.has(key)) {
+        sessionsMap.set(key, {
+          date: item.service_date,
+          type: item.service_type,
+          present: 0,
+          absent: 0,
+          total: 0
+        });
+      }
+
+      const session = sessionsMap.get(key);
+      session.total++;
+      if (item.attended === true) session.present++;
+      else session.absent++;
+    });
+
+    const sessionRows = [...sessionsMap.values()]
+      .sort((a, b) => (b.date || "").localeCompare(a.date || ""))
+      .map((session, index) => [
+        index + 1,
+        session.date,
+        session.type,
+        session.total,
+        session.present,
+        session.absent,
+        session.total
+          ? Math.round((session.present / session.total) * 100) + "%"
+          : "0%"
+      ]);
+
+    const sessions = [...new Set(
+      attendance
+        .filter(item => item.service_date <= today)
+        .map(item => item.service_date + "|" + item.service_type)
+    )];
+
+    const individualRows = [...members]
+      .sort((a, b) => (a.full_name || "").localeCompare(b.full_name || ""))
+      .map((member, index) => {
+        const joinedOn = member.joined_on || "0000-00-00";
+
+        const expectedSessions = sessions.filter(key => {
+          const date = key.split("|")[0];
+          return date >= joinedOn;
+        });
+
+        const expectedKeys = new Set(expectedSessions);
+        const memberRecords = attendance.filter(item =>
+          item.member_id === member.id &&
+          expectedKeys.has(item.service_date + "|" + item.service_type)
+        );
+
+        const attendedCount = memberRecords.filter(
+          item => item.attended === true
+        ).length;
+
+        const expectedCount = expectedSessions.length;
+        const percentage = expectedCount
+          ? Math.round((attendedCount / expectedCount) * 100)
+          : 0;
+
+        return [
+          index + 1,
+          member.full_name || "—",
+          member.member_number || "—",
+          attendedCount,
+          expectedCount,
+          percentage + "%"
+        ];
+      });
+
+    return [
+      makeSection(
+        "MUHTASARI WA MAHUDHURIO KWA IBADA",
+        ["Na.", "Tarehe", "Aina ya ibada", "Walioandikishwa", "Waliohudhuria", "Hawakuhudhuria", "Asilimia"],
+        sessionRows
+      ),
+      makeSection(
+        "MUHTASARI WA MAHUDHURIO KWA KILA MSHIRIKA",
+        ["Na.", "Jina", "Namba", "Amehudhuria", "Ibada zilizorekodiwa", "Asilimia"],
+        individualRows
+      )
+    ];
+  }
+
+  function getEventsReportSections() {
+    const events = [...(rows.church_events || [])]
+      .sort((a, b) => (a.event_date || "").localeCompare(b.event_date || ""));
+
+    const completed = events.filter(event => event.event_date < today);
+    const upcoming = events.filter(event => event.event_date >= today);
+
+    const convert = list => list.map((event, index) => [
+      index + 1,
+      event.event_name || "—",
+      event.event_date || "—",
+      event.description || "—"
+    ]);
+
+    return [
+      makeSection(
+        "MATUKIO YALIYOPITA",
+        ["Na.", "Jina la tukio", "Tarehe", "Maelezo"],
+        convert(completed)
+      ),
+      makeSection(
+        "MATUKIO YANAYOKUJA",
+        ["Na.", "Jina la tukio", "Tarehe", "Maelezo"],
+        convert(upcoming)
+      )
+    ];
   }
 
   function printMembersPDF() {
-    const members = [...(rows.members || [])].sort((a, b) =>
-      (a.full_name || "").localeCompare(b.full_name || "")
-    );
+    printNow({
+      title: "RIPOTI YA WASHIRIKA",
+      subtitle: "Washirika waliopangwa kwa idara na ambao hawajapangiwa idara",
+      sections: [getMemberDepartmentReport()]
+    });
+  }
 
-    const reportRows = members.map((member, index) => [
-      index + 1,
-      member.member_number || "—",
-      member.full_name || "—",
-      member.gender || "—",
-      member.phone || "—",
-      member.residence || "—",
-      member.is_active ? "Hai" : "Hajat"
-    ]);
+  function printVisitorsPDF() {
+    printNow({
+      title: "RIPOTI YA WAGENI",
+      subtitle: "Orodha ya wageni wa EAGT NYAKIGONGO",
+      sections: [getVisitorsReport()]
+    });
+  }
+
+  function printAttendancePDF() {
+    printNow({
+      title: "RIPOTI YA MAHUDHURIO",
+      subtitle: reportDate
+        ? "Mahudhurio ya tarehe " + reportDate + " na muhtasari wa washirika"
+        : "Muhtasari wa mahudhurio yote yaliyorekodiwa",
+      sections: getAttendanceReportSections()
+    });
+  }
+
+  function printEventsPDF() {
+    printNow({
+      title: "RIPOTI YA MATUKIO",
+      subtitle: "Matukio yaliyopita na matukio yanayokuja",
+      sections: getEventsReportSections()
+    });
+  }
+
+  function printMasterPDF() {
+    if (!pastor) {
+      return alert("Mchungaji pekee ndiye anayeruhusiwa kutoa ripoti kuu.");
+    }
 
     printNow({
-      title: "ORODHA YA WASHIRIKA",
-      subtitle: "EAGT NYAKIGONGO",
-      headers: [
-        "Na.",
-        "Namba",
-        "Jina kamili",
-        "Jinsia",
-        "Simu",
-        "Makazi",
-        "Hali"
-      ],
-      rows: reportRows
+      title: "RIPOTI KUU YA KANISA",
+      subtitle: "Ripoti ya washirika, wageni, mahudhurio na matukio",
+      sections: [
+        getMemberDepartmentReport(),
+        getVisitorsReport(),
+        ...getAttendanceReportSections(),
+        ...getEventsReportSections()
+      ]
     });
   }
 
@@ -810,23 +932,25 @@ export default function App() {
       item => item.id === selectedMemberId
     );
 
-    if (!member) {
-      return alert("Tafadhali chagua mshirika kwanza.");
-    }
+    if (!member) return alert("Tafadhali chagua mshirika kwanza.");
 
     const attendance = (rows.attendance || [])
       .filter(item => item.member_id === member.id)
-      .sort((a, b) =>
-        (b.service_date || "").localeCompare(a.service_date || "")
-      );
+      .sort((a, b) => (b.service_date || "").localeCompare(a.service_date || ""));
 
-    if (!attendance.length) {
-      return alert("Mshirika huyu hana taarifa za mahudhurio.");
-    }
+    const joinedOn = member.joined_on || "0000-00-00";
 
-    const attendedCount = attendance.filter(
-      item => item.attended === true
-    ).length;
+    const sessions = new Set(
+      (rows.attendance || [])
+        .filter(item => item.service_date >= joinedOn && item.service_date <= today)
+        .map(item => item.service_date + "|" + item.service_type)
+    );
+
+    const attendedCount = attendance.filter(item => item.attended === true).length;
+    const expectedCount = sessions.size;
+    const percentage = expectedCount
+      ? Math.round((attendedCount / expectedCount) * 100)
+      : 0;
 
     const reportRows = attendance.map((item, index) => [
       index + 1,
@@ -841,22 +965,24 @@ export default function App() {
         "Jina: " + member.full_name +
         " | Namba: " + (member.member_number || "—") +
         " | Amehudhuria: " + attendedCount +
-        " | Hakuhudhuria: " + (attendance.length - attendedCount),
-      headers: ["Na.", "Tarehe", "Aina ya ibada", "Hali ya mahudhurio"],
-      rows: reportRows
+        " kati ya ibada " + expectedCount +
+        " | Asilimia: " + percentage + "%",
+      sections: [
+        makeSection(
+          "MAHUDHURIO YA MSHIRIKA",
+          ["Na.", "Tarehe", "Aina ya ibada", "Hali"],
+          reportRows
+        )
+      ]
     });
   }
 
-  // ==========================================
   // UKURASA WA MAHUDHURIO
-  // ==========================================
 
   function renderAttendancePage() {
     const members = (rows.members || [])
       .filter(member => member.is_active)
-      .sort((a, b) =>
-        (a.full_name || "").localeCompare(b.full_name || "")
-      );
+      .sort((a, b) => (a.full_name || "").localeCompare(b.full_name || ""));
 
     const presentCount = members.filter(
       member => attendanceChecks[member.id] === true
@@ -883,42 +1009,19 @@ export default function App() {
             value={attendanceType}
             onChange={e => setAttendanceType(e.target.value)}
           >
-            {[
-              "JUMATANO",
-              "IJUMAA",
-              "MKESHA",
-              "JUMAPILI",
-              "IBADA KUU",
-              "MAOMBI",
-              "MAFUNDISHO YA BIBLIA",
-              "IBADA NYINGINE"
-            ].map(type => (
-              <option key={type} value={type}>
-                {type}
-              </option>
+            {serviceTypes.map(type => (
+              <option key={type} value={type}>{type}</option>
             ))}
           </select>
         </label>
 
         <div className="stats">
-          <article>
-            Washirika wote
-            <strong>{members.length}</strong>
-          </article>
-
-          <article>
-            Waliohudhuria
-            <strong>{presentCount}</strong>
-          </article>
-
-          <article>
-            Wasiokuwepo
-            <strong>{absentCount}</strong>
-          </article>
+          <article>Washirika wote<strong>{members.length}</strong></article>
+          <article>Waliohudhuria<strong>{presentCount}</strong></article>
+          <article>Wasiokuwepo<strong>{absentCount}</strong></article>
         </div>
 
         <h3>WEKA TIKI KWA WALIOHUDHURIA</h3>
-
         <p>
           Weka tiki kwenye kisanduku cha kila mshirika aliyefika ibadani.
           Wasiowekwa tiki watahesabiwa kuwa hawakuhudhuria.
@@ -940,31 +1043,20 @@ export default function App() {
               <input
                 type="checkbox"
                 checked={attendanceChecks[member.id] === true}
-                onChange={e =>
-                  setAttendanceChecks(previous => ({
-                    ...previous,
-                    [member.id]: e.target.checked
-                  }))
-                }
-                style={{
-                  width: "24px",
-                  height: "24px",
-                  flexShrink: 0
-                }}
+                onChange={e => setAttendanceChecks(previous => ({
+                  ...previous,
+                  [member.id]: e.target.checked
+                }))}
+                style={{ width: "24px", height: "24px", flexShrink: 0 }}
               />
-
               <span>
                 {index + 1}. {member.full_name}
-                {member.member_number
-                  ? " — " + member.member_number
-                  : ""}
+                {member.member_number ? " — " + member.member_number : ""}
               </span>
             </label>
           ))}
 
-          {!members.length && (
-            <p>Hakuna washirika hai waliopatikana.</p>
-          )}
+          {!members.length && <p>Hakuna washirika hai waliopatikana.</p>}
         </div>
 
         {(pastor || secretary) && (
@@ -973,35 +1065,26 @@ export default function App() {
             onClick={saveAllAttendance}
             disabled={attendanceSaving || !members.length}
           >
-            {attendanceSaving
-              ? "INAHIFADHI..."
-              : "HIFADHI MAHUDHURIO YOTE"}
+            {attendanceSaving ? "INAHIFADHI..." : "HIFADHI MAHUDHURIO YOTE"}
           </button>
         )}
       </div>
     );
   }
 
-  // ==========================================
   // UKURASA WA IDARA NA TAARIFA ZINGINE
-  // ==========================================
 
   function renderFormPage() {
     const config = configs[tab];
     const data = rows[config.table] || [];
 
-    // Orodha ya washirika wa idara iliyofunguliwa
     if (tab === "departments" && selectedDepartment) {
       const members = (rows.members || [])
         .filter(member =>
           member.is_active &&
-          (member.full_name || "")
-            .toLowerCase()
-            .includes(departmentSearch.toLowerCase())
+          (member.full_name || "").toLowerCase().includes(departmentSearch.toLowerCase())
         )
-        .sort((a, b) =>
-          (a.full_name || "").localeCompare(b.full_name || "")
-        );
+        .sort((a, b) => (a.full_name || "").localeCompare(b.full_name || ""));
 
       return (
         <div>
@@ -1017,23 +1100,12 @@ export default function App() {
           </button>
 
           <h2>{selectedDepartment.name}</h2>
-
           <h3>SAJILI WASHIRIKA KWENYE IDARA HII</h3>
-
-          <p>
-            Chagua washirika unaotaka wawe wanachama wa idara hii.
-          </p>
+          <p>Chagua washirika unaotaka wawe wanachama wa idara hii.</p>
 
           <div className="stats">
-            <article>
-              Washirika waliochaguliwa
-              <strong>{departmentMemberIds.length}</strong>
-            </article>
-
-            <article>
-              Washirika wanaoonekana
-              <strong>{members.length}</strong>
-            </article>
+            <article>Washirika waliochaguliwa<strong>{departmentMemberIds.length}</strong></article>
+            <article>Washirika wanaoonekana<strong>{members.length}</strong></article>
           </div>
 
           <input
@@ -1057,9 +1129,7 @@ export default function App() {
               type="checkbox"
               checked={
                 members.length > 0 &&
-                members.every(member =>
-                  departmentMemberIds.includes(member.id)
-                )
+                members.every(member => departmentMemberIds.includes(member.id))
               }
               onChange={() => toggleAllDepartmentMembers(members)}
             />
@@ -1083,25 +1153,15 @@ export default function App() {
                   type="checkbox"
                   checked={departmentMemberIds.includes(member.id)}
                   onChange={() => toggleDepartmentMember(member.id)}
-                  style={{
-                    width: "22px",
-                    height: "22px",
-                    flexShrink: 0
-                  }}
+                  style={{ width: "22px", height: "22px", flexShrink: 0 }}
                 />
-
                 <span>
                   {index + 1}. {member.full_name}
-                  {member.member_number
-                    ? " — " + member.member_number
-                    : ""}
+                  {member.member_number ? " — " + member.member_number : ""}
                 </span>
               </label>
             ))}
-
-            {!members.length && (
-              <p>Hakuna washirika hai waliopatikana.</p>
-            )}
+            {!members.length && <p>Hakuna washirika hai waliopatikana.</p>}
           </div>
 
           <button
@@ -1109,9 +1169,7 @@ export default function App() {
             onClick={saveDepartmentMembers}
             disabled={departmentSaving}
           >
-            {departmentSaving
-              ? "INAHIFADHI..."
-              : "HIFADHI WASHIRIKA WALIOCHAGULIWA"}
+            {departmentSaving ? "INAHIFADHI..." : "HIFADHI WASHIRIKA WALIOCHAGULIWA"}
           </button>
         </div>
       );
@@ -1131,22 +1189,13 @@ export default function App() {
           onChange={e => setSearch(e.target.value)}
         />
 
-        {tab === "members" && (
-          <button type="button" onClick={printMembersPDF}>
-            PAKUA PDF YA ORODHA YA WASHIRIKA
-          </button>
-        )}
-
         {(pastor || secretary) && !editing && (
-          <button type="button" onClick={startNew}>
-            + Ongeza taarifa
-          </button>
+          <button type="button" onClick={startNew}>+ Ongeza taarifa</button>
         )}
 
         {Object.keys(draft).length > 0 && (
           <form onSubmit={saveRecord} className="record-form">
             <h3>{editing ? "Hariri taarifa" : "Taarifa mpya"}</h3>
-
             {config.fields.map(field => renderField(field))}
 
             <button disabled={loading}>
@@ -1173,19 +1222,14 @@ export default function App() {
               {tab === "departments" ? (
                 <>
                   <h3>{row.name}</h3>
-
                   <p>{row.description || "Hakuna maelezo."}</p>
+                  <p>Hali: {row.is_active ? "Hai" : "Haifanyi kazi"}</p>
 
-                  <p>
-                    Hali: {row.is_active ? "Hai" : "Haifanyi kazi"}
-                  </p>
-
-                  <button
-                    type="button"
-                    onClick={() => openDepartmentMembers(row)}
-                  >
-                    FUNGUA NA SAJILI WASHIRIKA
-                  </button>
+                  {(pastor || secretary) && (
+                    <button type="button" onClick={() => openDepartmentMembers(row)}>
+                      FUNGUA NA SAJILI WASHIRIKA
+                    </button>
+                  )}
 
                   <p>
                     Washirika waliosajiliwa:{" "}
@@ -1198,11 +1242,8 @@ export default function App() {
                 config.fields.map(([key, label]) => (
                   <p key={key}>
                     <strong>{label}:</strong>{" "}
-
                     {key === "member_id"
-                      ? (rows.members || []).find(
-                          member => member.id === row[key]
-                        )?.full_name || "—"
+                      ? (rows.members || []).find(member => member.id === row[key])?.full_name || "—"
                       : key === "is_active"
                         ? (row[key] ? "Hai" : "Haifanyi kazi")
                         : key === "attended"
@@ -1214,35 +1255,20 @@ export default function App() {
 
               {pastor && (
                 <div className="actions">
-                  <button
-                    type="button"
-                    onClick={() => startEdit(row)}
-                  >
-                    Hariri
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => deleteRecord(row.id)}
-                  >
-                    Futa
-                  </button>
+                  <button type="button" onClick={() => startEdit(row)}>Hariri</button>
+                  <button type="button" onClick={() => deleteRecord(row.id)}>Futa</button>
                 </div>
               )}
             </article>
           ))}
 
-          {!filtered.length && (
-            <p>Hakuna taarifa zilizopatikana.</p>
-          )}
+          {!filtered.length && <p>Hakuna taarifa zilizopatikana.</p>}
         </div>
       </>
     );
   }
 
-  // ==========================================
   // DASHBOARD
-  // ==========================================
 
   function renderDashboard() {
     return (
@@ -1250,39 +1276,18 @@ export default function App() {
         <h2>Muhtasari wa kanisa</h2>
 
         <div className="stats">
-          <article>
-            Washirika
-            <strong>{(rows.members || []).length}</strong>
-          </article>
-
-          <article>
-            Wageni
-            <strong>{(rows.visitors || []).length}</strong>
-          </article>
-
-          <article>
-            Idara
-            <strong>{(rows.departments || []).length}</strong>
-          </article>
-
-          <article>
-            Mahudhurio
-            <strong>{(rows.attendance || []).length}</strong>
-          </article>
-
-          <article>
-            Matukio
-            <strong>{(rows.church_events || []).length}</strong>
-          </article>
+          <article>Washirika<strong>{(rows.members || []).length}</strong></article>
+          <article>Wageni<strong>{(rows.visitors || []).length}</strong></article>
+          <article>Idara<strong>{(rows.departments || []).length}</strong></article>
+          <article>Mahudhurio<strong>{(rows.attendance || []).length}</strong></article>
+          <article>Matukio<strong>{(rows.church_events || []).length}</strong></article>
         </div>
 
         <h3>Matukio yajayo</h3>
 
         {(rows.church_events || [])
           .filter(event => event.event_date >= today)
-          .sort((a, b) =>
-            a.event_date.localeCompare(b.event_date)
-          )
+          .sort((a, b) => a.event_date.localeCompare(b.event_date))
           .map(event => (
             <article className="record" key={event.id}>
               <strong>{event.event_name}</strong>
@@ -1294,9 +1299,7 @@ export default function App() {
     );
   }
 
-  // ==========================================
   // SMS
-  // ==========================================
 
   function renderSMSPage() {
     return (
@@ -1305,17 +1308,13 @@ export default function App() {
 
         {pastor ? (
           <form onSubmit={sendSMS}>
-            <p>
-              Ujumbe utatumwa kwa washirika hai wenye namba za simu.
-            </p>
-
+            <p>Ujumbe utatumwa kwa washirika hai wenye namba za simu.</p>
             <textarea
               value={message}
               onChange={e => setMessage(e.target.value)}
               placeholder="Andika ujumbe wako hapa..."
               required
             />
-
             <button disabled={smsBusy}>
               {smsBusy ? "Inatuma..." : "TUMA SMS KWA WASHIRIKA"}
             </button>
@@ -1338,9 +1337,7 @@ export default function App() {
     );
   }
 
-  // ==========================================
   // RIPOTI
-  // ==========================================
 
   function renderReports() {
     const members = rows.members || [];
@@ -1354,10 +1351,29 @@ export default function App() {
 
     return (
       <div className="reports">
-        <h2>Ripoti za kanisa</h2>
+        <h2>RIPOTI ZA KANISA</h2>
+
+        <div className="stats">
+          <article>Washirika<strong>{members.length}</strong></article>
+          <article>Washirika hai<strong>{members.filter(m => m.is_active).length}</strong></article>
+          <article>Wageni<strong>{visitors.length}</strong></article>
+          <article>Waliohudhuria<strong>{filteredAttendance.filter(a => a.attended === true).length}</strong></article>
+          <article>Matukio<strong>{events.length}</strong></article>
+        </div>
+
+        <h3>RIPOTI ZA PDF</h3>
+        <p>Chagua ripoti unayotaka kuitoa kama PDF.</p>
+
+        <button type="button" onClick={printMembersPDF}>
+          PDF 1: WASHIRIKA KWA IDARA
+        </button>
+
+        <button type="button" onClick={printVisitorsPDF}>
+          PDF 2: ORODHA YA WAGENI
+        </button>
 
         <label>
-          Chagua tarehe ya mahudhurio
+          Chagua tarehe ya mahudhurio (acha wazi kwa ripoti yote)
           <input
             type="date"
             value={reportDate}
@@ -1365,36 +1381,27 @@ export default function App() {
           />
         </label>
 
-        <div className="stats">
-          <article>
-            Washirika
-            <strong>{members.length}</strong>
-          </article>
+        <button type="button" onClick={printAttendancePDF}>
+          PDF 3: RIPOTI YA MAHUDHURIO
+        </button>
 
-          <article>
-            Washirika hai
-            <strong>{members.filter(m => m.is_active).length}</strong>
-          </article>
+        <button type="button" onClick={printEventsPDF}>
+          PDF 4: RIPOTI YA MATUKIO
+        </button>
 
-          <article>
-            Wageni
-            <strong>{visitors.length}</strong>
-          </article>
+        {pastor && (
+          <>
+            <h3>RIPOTI KUU YA MCHUNGAJI</h3>
+            <p>Ripoti hii ina sehemu zote nne katika PDF moja.</p>
+            <button type="button" onClick={printMasterPDF}>
+              PAKUA PDF KUU YA KANISA
+            </button>
+          </>
+        )}
 
-          <article>
-            Mahudhurio
-            <strong>
-              {filteredAttendance.filter(a => a.attended).length}
-            </strong>
-          </article>
+        <divider />
 
-          <article>
-            Matukio
-            <strong>{events.length}</strong>
-          </article>
-        </div>
-
-        <h3>PDF ya mahudhurio ya mshirika mmoja</h3>
+        <h3>PDF YA MAHUDHURIO YA MSHIRIKA MMOJA</h3>
 
         <label>
           Chagua mshirika
@@ -1403,58 +1410,36 @@ export default function App() {
             onChange={e => setSelectedMemberId(e.target.value)}
           >
             <option value="">-- Chagua mshirika --</option>
-
             {members
               .filter(member => member.is_active)
-              .sort((a, b) =>
-                (a.full_name || "").localeCompare(b.full_name || "")
-              )
+              .sort((a, b) => (a.full_name || "").localeCompare(b.full_name || ""))
               .map(member => (
                 <option key={member.id} value={member.id}>
                   {member.full_name}
-                  {member.member_number
-                    ? " - " + member.member_number
-                    : ""}
+                  {member.member_number ? " - " + member.member_number : ""}
                 </option>
               ))}
           </select>
         </label>
 
-        <button
-          type="button"
-          onClick={printIndividualAttendance}
-        >
+        <button type="button" onClick={printIndividualAttendance}>
           PAKUA PDF YA MAHUDHURIO YAKE
         </button>
 
-        <h3>Mahudhurio</h3>
-
+        <h3>Muhtasari wa mahudhurio</h3>
         {filteredAttendance.map(item => (
           <p key={item.id}>
-            {(members.find(m => m.id === item.member_id)?.full_name
-              || "Mshirika")}
-            {" — "}
-            {item.service_date}
-            {" — "}
-            {item.service_type}
-            {" — "}
-            {item.attended ? "Amehudhuria" : "Hakuhudhuria"}
+            {(members.find(m => m.id === item.member_id)?.full_name || "Mshirika")}
+            {" — "}{item.service_date}
+            {" — "}{item.service_type}
+            {" — "}{item.attended ? "Amehudhuria" : "Hakuhudhuria"}
           </p>
         ))}
-
-        <button
-          type="button"
-          onClick={() => window.print()}
-        >
-          CHAPISHA RIPOTI YA JUMLA
-        </button>
       </div>
     );
   }
 
-  // ==========================================
   // LOGIN
-  // ==========================================
 
   if (!user) {
     return (
@@ -1470,7 +1455,6 @@ export default function App() {
             onChange={e => setEmail(e.target.value)}
             required
           />
-
           <input
             type="password"
             placeholder="Nenosiri"
@@ -1478,20 +1462,15 @@ export default function App() {
             onChange={e => setPassword(e.target.value)}
             required
           />
-
           <button>INGIA</button>
         </form>
       </main>
     );
   }
 
-  if (!profile) {
-    return <p>Inapakia taarifa za mtumiaji...</p>;
-  }
+  if (!profile) return <p>Inapakia taarifa za mtumiaji...</p>;
 
-  // ==========================================
   // MWONEKANO MKUU
-  // ==========================================
 
   return (
     <main className="app">
@@ -1528,9 +1507,15 @@ export default function App() {
 
           .print-area h1,
           .print-area h2,
+          .print-area h3,
           .print-area p {
             color: black !important;
             text-align: center;
+          }
+
+          .print-section {
+            page-break-inside: auto;
+            margin-bottom: 28px;
           }
 
           .print-area table {
@@ -1544,10 +1529,16 @@ export default function App() {
             border: 1px solid black !important;
             padding: 7px;
             color: black !important;
+            text-align: left;
           }
 
           .print-area th {
             background: #eee !important;
+          }
+
+          .print-signature {
+            margin-top: 35px;
+            text-align: left !important;
           }
 
           @page {
@@ -1606,27 +1597,41 @@ export default function App() {
           <p>{printReport.subtitle}</p>
           <p>Tarehe ya kutolewa: {today}</p>
 
-          <table>
-            <thead>
-              <tr>
-                {printReport.headers.map((header, index) => (
-                  <th key={index}>{header}</th>
-                ))}
-              </tr>
-            </thead>
+          {(printReport.sections || []).map((section, sectionIndex) => (
+            <div className="print-section" key={sectionIndex}>
+              <h3>{section.title}</h3>
 
-            <tbody>
-              {printReport.rows.map((row, index) => (
-                <tr key={index}>
-                  {row.map((cell, cellIndex) => (
-                    <td key={cellIndex}>{cell}</td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+              <table>
+                <thead>
+                  <tr>
+                    {section.headers.map((header, index) => (
+                      <th key={index}>{header}</th>
+                    ))}
+                  </tr>
+                </thead>
 
-          <p style={{ marginTop: "35px" }}>
+                <tbody>
+                  {section.rows.length > 0 ? (
+                    section.rows.map((row, index) => (
+                      <tr key={index}>
+                        {row.map((cell, cellIndex) => (
+                          <td key={cellIndex}>{cell}</td>
+                        ))}
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={section.headers.length}>
+                        Hakuna taarifa zilizopatikana.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          ))}
+
+          <p className="print-signature">
             Sahihi ya Mchungaji: __________________________
           </p>
         </div>

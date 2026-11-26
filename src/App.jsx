@@ -137,6 +137,15 @@ export default function App() {
   const [selectedMemberId, setSelectedMemberId] = useState("");
   const [printReport, setPrintReport] = useState(null);
 
+  // USIMAMIZI WA NENOSIRI
+  const [showPassword, setShowPassword] = useState(false);
+  const [showPasswordPanel, setShowPasswordPanel] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [passwordBusy, setPasswordBusy] = useState(false);
+
   const [attendanceDate, setAttendanceDate] = useState(today);
   const [attendanceType, setAttendanceType] = useState("JUMAPILI");
   const [attendanceChecks, setAttendanceChecks] = useState({});
@@ -188,6 +197,39 @@ export default function App() {
     }
 
     setProfile(data);
+  }
+
+  // KUBADILI PASSWORD YA AKAUNTI
+  async function changePassword(e) {
+    e.preventDefault();
+
+    if (newPassword.length < 6) {
+      return alert("Nenosiri jipya liwe na angalau herufi au namba 6.");
+    }
+
+    if (newPassword !== confirmPassword) {
+      return alert("Nenosiri jipya na uthibitisho havifanani.");
+    }
+
+    setPasswordBusy(true);
+
+    const { error } = await supabase.auth.updateUser({
+      password: newPassword
+    });
+
+    setPasswordBusy(false);
+
+    if (error) {
+      return alert("Imeshindwa kubadili nenosiri: " + error.message);
+    }
+
+    setNewPassword("");
+    setConfirmPassword("");
+    setShowNewPassword(false);
+    setShowConfirmPassword(false);
+    setShowPasswordPanel(false);
+
+    alert("Nenosiri limebadilishwa kikamilifu.");
   }
 
   async function loadData() {
@@ -272,6 +314,7 @@ export default function App() {
     setUser(null);
     setProfile(null);
     setRows({});
+    setShowPasswordPanel(false);
   }
 
   function startNew() {
@@ -1399,7 +1442,7 @@ export default function App() {
           </>
         )}
 
-        <divider />
+        <hr />
 
         <h3>PDF YA MAHUDHURIO YA MSHIRIKA MMOJA</h3>
 
@@ -1455,14 +1498,31 @@ export default function App() {
             onChange={e => setEmail(e.target.value)}
             required
           />
-          <input
-            type="password"
-            placeholder="Nenosiri"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            required
-          />
-          <button>INGIA</button>
+
+          <div style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            width: "100%"
+          }}>
+            <input
+              type={showPassword ? "text" : "password"}
+              placeholder="Nenosiri"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              required
+              style={{ flex: 1, minWidth: 0 }}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(value => !value)}
+              style={{ whiteSpace: "nowrap" }}
+            >
+              {showPassword ? "FICHA" : "ONYESHA"}
+            </button>
+          </div>
+
+          <button type="submit">INGIA</button>
         </form>
       </main>
     );
@@ -1552,8 +1612,108 @@ export default function App() {
         <h1>EAGT NYAKIGONGO</h1>
         <p>MFUMO WA USIMAMIZI WA KANISA</p>
         <p>{profile.full_name} — {profile.role}</p>
-        <button onClick={logout}>TOKA</button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setShowPasswordPanel(value => !value);
+            setNewPassword("");
+            setConfirmPassword("");
+            setShowNewPassword(false);
+            setShowConfirmPassword(false);
+          }}
+        >
+          {showPasswordPanel ? "FUNGA BADILI PASSWORD" : "BADILI PASSWORD"}
+        </button>
+
+        <button type="button" onClick={logout}>TOKA</button>
       </header>
+
+      {showPasswordPanel && (
+        <section className="record-form">
+          <h2>BADILI PASSWORD</h2>
+          <p>
+            Weka nenosiri jipya la akaunti yako. Nenosiri lazima liwe na
+            angalau herufi au namba 6.
+          </p>
+
+          <form onSubmit={changePassword}>
+            <label>
+              Nenosiri jipya
+              <div style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                width: "100%"
+              }}>
+                <input
+                  type={showNewPassword ? "text" : "password"}
+                  value={newPassword}
+                  onChange={e => setNewPassword(e.target.value)}
+                  minLength={6}
+                  required
+                  autoComplete="new-password"
+                  placeholder="Andika nenosiri jipya"
+                  style={{ flex: 1, minWidth: 0 }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowNewPassword(value => !value)}
+                  style={{ whiteSpace: "nowrap" }}
+                >
+                  {showNewPassword ? "FICHA" : "ONYESHA"}
+                </button>
+              </div>
+            </label>
+
+            <label>
+              Thibitisha nenosiri jipya
+              <div style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                width: "100%"
+              }}>
+                <input
+                  type={showConfirmPassword ? "text" : "password"}
+                  value={confirmPassword}
+                  onChange={e => setConfirmPassword(e.target.value)}
+                  minLength={6}
+                  required
+                  autoComplete="new-password"
+                  placeholder="Rudia nenosiri jipya"
+                  style={{ flex: 1, minWidth: 0 }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(value => !value)}
+                  style={{ whiteSpace: "nowrap" }}
+                >
+                  {showConfirmPassword ? "FICHA" : "ONYESHA"}
+                </button>
+              </div>
+            </label>
+
+            <button type="submit" disabled={passwordBusy}>
+              {passwordBusy ? "INABADILI..." : "HIFADHI PASSWORD MPYA"}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setShowPasswordPanel(false);
+                setNewPassword("");
+                setConfirmPassword("");
+                setShowNewPassword(false);
+                setShowConfirmPassword(false);
+              }}
+              disabled={passwordBusy}
+            >
+              GHAIRI
+            </button>
+          </form>
+        </section>
+      )}
 
       <nav>
         {pages.map(([id, name]) => (

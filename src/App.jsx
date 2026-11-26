@@ -141,9 +141,7 @@ export default function App() {
   const [showPassword, setShowPassword] = useState(false);
   const [showPasswordPanel, setShowPasswordPanel] = useState(false);
   const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
   const [showNewPassword, setShowNewPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [passwordBusy, setPasswordBusy] = useState(false);
 
   const [attendanceDate, setAttendanceDate] = useState(today);
@@ -207,10 +205,6 @@ export default function App() {
       return alert("Nenosiri jipya liwe na angalau herufi au namba 6.");
     }
 
-    if (newPassword !== confirmPassword) {
-      return alert("Nenosiri jipya na uthibitisho havifanani.");
-    }
-
     setPasswordBusy(true);
 
     const { error } = await supabase.auth.updateUser({
@@ -224,9 +218,7 @@ export default function App() {
     }
 
     setNewPassword("");
-    setConfirmPassword("");
     setShowNewPassword(false);
-    setShowConfirmPassword(false);
     setShowPasswordPanel(false);
 
     alert("Nenosiri limebadilishwa kikamilifu.");
@@ -1482,7 +1474,7 @@ export default function App() {
     );
   }
 
-  // LOGIN
+  // LOGIN - KISANDUKU KIKUBWA CHA PASSWORD
 
   if (!user) {
     return (
@@ -1497,32 +1489,67 @@ export default function App() {
             value={email}
             onChange={e => setEmail(e.target.value)}
             required
+            style={{
+              display: "block",
+              width: "100%",
+              minHeight: "55px",
+              boxSizing: "border-box",
+              fontSize: "18px",
+              padding: "12px",
+              marginBottom: "15px"
+            }}
           />
 
           <div style={{
             display: "flex",
-            alignItems: "center",
-            gap: "8px",
+            flexDirection: "column",
+            alignItems: "stretch",
+            gap: "10px",
             width: "100%"
           }}>
             <input
               type={showPassword ? "text" : "password"}
-              placeholder="Nenosiri"
+              placeholder="Andika nenosiri hapa"
               value={password}
               onChange={e => setPassword(e.target.value)}
               required
-              style={{ flex: 1, minWidth: 0 }}
+              autoComplete="current-password"
+              style={{
+                display: "block",
+                width: "100%",
+                minWidth: "100%",
+                minHeight: "58px",
+                boxSizing: "border-box",
+                fontSize: "18px",
+                padding: "14px",
+                margin: "0"
+              }}
             />
+
             <button
               type="button"
               onClick={() => setShowPassword(value => !value)}
-              style={{ whiteSpace: "nowrap" }}
+              style={{
+                width: "100%",
+                minHeight: "48px",
+                fontSize: "16px"
+              }}
             >
-              {showPassword ? "FICHA" : "ONYESHA"}
+              {showPassword ? "FICHA PASSWORD" : "ONYESHA PASSWORD"}
             </button>
           </div>
 
-          <button type="submit">INGIA</button>
+          <button
+            type="submit"
+            style={{
+              width: "100%",
+              minHeight: "52px",
+              fontSize: "18px",
+              marginTop: "15px"
+            }}
+          >
+            INGIA
+          </button>
         </form>
       </main>
     );
@@ -1618,9 +1645,7 @@ export default function App() {
           onClick={() => {
             setShowPasswordPanel(value => !value);
             setNewPassword("");
-            setConfirmPassword("");
             setShowNewPassword(false);
-            setShowConfirmPassword(false);
           }}
         >
           {showPasswordPanel ? "FUNGA BADILI PASSWORD" : "BADILI PASSWORD"}
@@ -1640,59 +1665,31 @@ export default function App() {
           <form onSubmit={changePassword}>
             <label>
               Nenosiri jipya
-              <div style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-                width: "100%"
-              }}>
-                <input
-                  type={showNewPassword ? "text" : "password"}
-                  value={newPassword}
-                  onChange={e => setNewPassword(e.target.value)}
-                  minLength={6}
-                  required
-                  autoComplete="new-password"
-                  placeholder="Andika nenosiri jipya"
-                  style={{ flex: 1, minWidth: 0 }}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowNewPassword(value => !value)}
-                  style={{ whiteSpace: "nowrap" }}
-                >
-                  {showNewPassword ? "FICHA" : "ONYESHA"}
-                </button>
-              </div>
+              <input
+                type={showNewPassword ? "text" : "password"}
+                value={newPassword}
+                onChange={e => setNewPassword(e.target.value)}
+                minLength={6}
+                required
+                autoComplete="new-password"
+                placeholder="Andika nenosiri jipya"
+                style={{
+                  display: "block",
+                  width: "100%",
+                  minHeight: "55px",
+                  boxSizing: "border-box",
+                  fontSize: "18px",
+                  padding: "12px"
+                }}
+              />
             </label>
 
-            <label>
-              Thibitisha nenosiri jipya
-              <div style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-                width: "100%"
-              }}>
-                <input
-                  type={showConfirmPassword ? "text" : "password"}
-                  value={confirmPassword}
-                  onChange={e => setConfirmPassword(e.target.value)}
-                  minLength={6}
-                  required
-                  autoComplete="new-password"
-                  placeholder="Rudia nenosiri jipya"
-                  style={{ flex: 1, minWidth: 0 }}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowConfirmPassword(value => !value)}
-                  style={{ whiteSpace: "nowrap" }}
-                >
-                  {showConfirmPassword ? "FICHA" : "ONYESHA"}
-                </button>
-              </div>
-            </label>
+            <button
+              type="button"
+              onClick={() => setShowNewPassword(value => !value)}
+            >
+              {showNewPassword ? "FICHA PASSWORD" : "ONYESHA PASSWORD"}
+            </button>
 
             <button type="submit" disabled={passwordBusy}>
               {passwordBusy ? "INABADILI..." : "HIFADHI PASSWORD MPYA"}
@@ -1703,9 +1700,7 @@ export default function App() {
               onClick={() => {
                 setShowPasswordPanel(false);
                 setNewPassword("");
-                setConfirmPassword("");
                 setShowNewPassword(false);
-                setShowConfirmPassword(false);
               }}
               disabled={passwordBusy}
             >

@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from "react";
 import { supabase } from "./supabase";
 import "./App.css";
@@ -133,6 +132,11 @@ export default function App() {
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
   const [smsBusy, setSmsBusy] = useState(false);
+
+  // UCHAGUZI WA WAPOKEAJI WA SMS
+  const [selectedSmsMembers, setSelectedSmsMembers] = useState([]);
+  const [smsSearch, setSmsSearch] = useState("");
+
   const [reportDate, setReportDate] = useState("");
   const [selectedMemberId, setSelectedMemberId] = useState("");
   const [printReport, setPrintReport] = useState(null);
@@ -583,7 +587,38 @@ export default function App() {
     await loadData();
   }
 
-  // SMS
+  // SMS: WAPOKEAJI WANAOWEZA KUCHAGULIWA
+
+  function getSmsEligibleMembers() {
+    return (rows.members || [])
+      .filter(member =>
+        member.is_active === true &&
+        member.phone &&
+        String(member.phone).trim() !== ""
+      )
+      .sort((a, b) =>
+        (a.full_name || "").localeCompare(b.full_name || "")
+      );
+  }
+
+  function toggleSmsMember(memberId) {
+    setSelectedSmsMembers(previous =>
+      previous.includes(memberId)
+        ? previous.filter(id => id !== memberId)
+        : [...previous, memberId]
+    );
+  }
+
+  function selectAllSmsMembers() {
+    const members = getSmsEligibleMembers();
+    setSelectedSmsMembers(members.map(member => member.id));
+  }
+
+  function clearSmsSelection() {
+    setSelectedSmsMembers([]);
+  }
+
+  // KUTUMA SMS KWA WALIOCHAGULIWA TU
 
   async function sendSMS(e) {
     e.preventDefault();
@@ -592,46 +627,91 @@ export default function App() {
       return alert("Mchungaji pekee ndiye anayeruhusiwa kutuma SMS.");
     }
 
-    const members = (rows.members || []).filter(
-      member => member.is_active && member.phone
+    const cleanMessage = message.trim();
+
+    if (!cleanMessage) {
+      return alert("Tafadhali andika ujumbe wa SMS.");
+    }
+
+    const members = getSmsEligibleMembers().filter(member =>
+      selectedSmsMembers.includes(member.id)
     );
 
     if (!members.length) {
-      return alert("Hakuna washirika hai wenye namba za simu.");
+      return alert("Tafadhali chagua angalau mshirika mmoja.");
     }
 
-    if (!window.confirm("Unataka kutuma ujumbe kwa washirika " + members.length + "?")) {
+    if (!window.confirm(
+      "Unataka kutuma SMS kwa washirika " + members.length + " uliochagua?"
+    )) {
       return;
     }
 
     setSmsBusy(true);
+
     let sent = 0;
     let failed = 0;
+    const failedIds = [];
 
     for (const member of members) {
-      const { error } = await supabase.functions.invoke("send-sms", {
-        body: { phone: member.phone, message }
-      });
+      let status = "failed";
 
-      if (error) {
+      try {
+        const { data, error } = await supabase.functions.invoke("send-sms", {
+          body: {
+            phone: member.phone,
+            message: cleanMessage
+          }
+        });
+
+        if (!error && data?.success !== false) {
+          status = "sent";
+          sent++;
+        } else {
+          failed++;
+          failedIds.push(member.id);
+          console.error(
+            "SMS imeshindwa kwa " + member.phone,
+            error || data
+          );
+        }
+      } catch (error) {
         failed++;
-        continue;
+        failedIds.push(member.id);
+        console.error("Hitilafu ya kutuma SMS:", error);
       }
 
-      const saved = await supabase.from("sms_history").insert({
-        phone: member.phone,
-        message,
-        status: "sent"
-      });
+      const { error: historyError } = await supabase
+        .from("sms_history")
+        .insert({
+          phone: member.phone,
+          message: cleanMessage,
+          status
+        });
 
-      if (saved.error) failed++;
-      else sent++;
+      if (historyError) {
+        console.error("Imeshindwa kuhifadhi historia ya SMS:", historyError);
+      }
     }
 
     setSmsBusy(false);
-    setMessage("");
 
-    alert("SMS zilizotumwa: " + sent + "\nZilizoshindwa: " + failed);
+    // Waliopokea vizuri wanaondolewa kwenye uchaguzi.
+    // Walioshindwa wanabaki wamechaguliwa ili waweze kujaribiwa tena.
+    setSelectedSmsMembers(failedIds);
+
+    if (failed === 0) {
+      setMessage("");
+    }
+
+    alert(
+      "SMS zilizotumwa vizuri: " + sent +
+      "\nSMS zilizoshindwa: " + failed +
+      (failed > 0
+        ? "\nWalioshindwa wamebaki wamechaguliwa ili ujaribu tena."
+        : "\nUjumbe umetumwa kwa wote uliochagua.")
+    );
+
     await loadData();
   }
 
@@ -1334,24 +1414,189 @@ export default function App() {
     );
   }
 
-  // SMS
+  // UKURASA MPYA WA SMS: UCHAGUZI WA WAPOKEAJI
 
   function renderSMSPage() {
+    const eligibleMembers = getSmsEligibleMembers();
+
+    const visibleMembers = eligibleMembers.filter(member => {
+      const name = (member.full_name || "").toLowerCase();
+      const phone = String(member.phone || "");
+      const term = smsSearch.trim().toLowerCase();
+
+      return name.includes(term) || phone.includes(term);
+    });
+
+    const selectedCount = eligibleMembers.filter(member =>
+      selectedSmsMembers.includes(member.id)
+    ).length;
+
+    const allSelected =
+      eligibleMembers.length > 0 &&
+      selectedCount === eligibleMembers.length;
+
     return (
       <>
         <h2>Ujumbe wa SMS</h2>
 
         {pastor ? (
           <form onSubmit={sendSMS}>
-            <p>Ujumbe utatumwa kwa washirika hai wenye namba za simu.</p>
+            <h3>1. CHAGUA WAPOKEAJI</h3>
+
+            <div className="stats">
+              <article>
+                Washirika wenye simu
+                <strong>{eligibleMembers.length}</strong>
+              </article>
+
+              <article>
+                Waliochaguliwa
+                <strong>{selectedCount}</strong>
+              </article>
+            </div>
+
+            <p>
+              Weka tiki kwa mshirika mmoja au zaidi. Unaweza pia kuchagua
+              washirika wote.
+            </p>
+
+            <input
+              type="text"
+              value={smsSearch}
+              onChange={e => setSmsSearch(e.target.value)}
+              placeholder="Tafuta kwa jina au namba ya simu..."
+            />
+
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: "10px",
+                margin: "12px 0"
+              }}
+            >
+              <button
+                type="button"
+                onClick={selectAllSmsMembers}
+                disabled={smsBusy || eligibleMembers.length === 0}
+              >
+                CHAGUA WOTE
+              </button>
+
+              <button
+                type="button"
+                onClick={clearSmsSelection}
+                disabled={smsBusy || selectedCount === 0}
+              >
+                ONDOA UCHAGUZI
+              </button>
+            </div>
+
+            <label
+              className="record"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "12px",
+                padding: "12px",
+                cursor: "pointer"
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={allSelected}
+                onChange={() => {
+                  if (allSelected) {
+                    clearSmsSelection();
+                  } else {
+                    selectAllSmsMembers();
+                  }
+                }}
+                disabled={smsBusy || eligibleMembers.length === 0}
+                style={{
+                  width: "22px",
+                  height: "22px",
+                  flexShrink: 0
+                }}
+              />
+
+              <strong>CHAGUA WASHIRIKA WOTE</strong>
+            </label>
+
+            <div className="record-list">
+              {visibleMembers.map((member, index) => (
+                <label
+                  key={member.id}
+                  className="record"
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "12px",
+                    padding: "12px",
+                    cursor: "pointer"
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedSmsMembers.includes(member.id)}
+                    onChange={() => toggleSmsMember(member.id)}
+                    disabled={smsBusy}
+                    style={{
+                      width: "23px",
+                      height: "23px",
+                      flexShrink: 0
+                    }}
+                  />
+
+                  <span>
+                    <strong>
+                      {index + 1}. {member.full_name || "Bila jina"}
+                    </strong>
+                    <br />
+                    <small>{member.phone}</small>
+                  </span>
+                </label>
+              ))}
+
+              {visibleMembers.length === 0 && (
+                <p>Hakuna mshirika aliyepatikana kwa utafutaji huo.</p>
+              )}
+            </div>
+
+            <h3>2. ANDIKA UJUMBE</h3>
+
             <textarea
               value={message}
               onChange={e => setMessage(e.target.value)}
               placeholder="Andika ujumbe wako hapa..."
               required
+              rows={5}
+              disabled={smsBusy}
+              style={{
+                width: "100%",
+                boxSizing: "border-box",
+                minHeight: "120px"
+              }}
             />
-            <button disabled={smsBusy}>
-              {smsBusy ? "Inatuma..." : "TUMA SMS KWA WASHIRIKA"}
+
+            <p>
+              SMS zitatumwa kwa washirika
+              <strong> {selectedCount} </strong>
+              uliochagua.
+            </p>
+
+            <button
+              type="submit"
+              disabled={smsBusy || selectedCount === 0 || !message.trim()}
+              style={{
+                width: "100%",
+                minHeight: "50px",
+                fontSize: "16px"
+              }}
+            >
+              {smsBusy
+                ? "INATUMA SMS, SUBIRI..."
+                : "TUMA SMS KWA WACHAGULIWA (" + selectedCount + ")"}
             </button>
           </form>
         ) : (

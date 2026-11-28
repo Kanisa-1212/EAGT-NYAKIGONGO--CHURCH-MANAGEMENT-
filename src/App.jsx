@@ -1,8 +1,18 @@
+
 import React, { useEffect, useState } from "react";
 import { supabase } from "./supabase";
 import "./App.css";
 
-const today = new Date().toISOString().slice(0, 10);
+// TAREHE YA ENEO LA MTUMIAJI
+function getLocalDate() {
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+const today = getLocalDate();
 
 const pages = [
   ["dashboard", "Mwanzo"],
@@ -16,8 +26,13 @@ const pages = [
 ];
 
 const serviceTypes = [
-  "JUMATANO", "IJUMAA", "MKESHA", "JUMAPILI",
-  "IBADA KUU", "MAOMBI", "MAFUNDISHO YA BIBLIA",
+  "JUMATANO",
+  "IJUMAA",
+  "MKESHA",
+  "JUMAPILI",
+  "IBADA KUU",
+  "MAOMBI",
+  "MAFUNDISHO YA BIBLIA",
   "IBADA NYINGINE"
 ];
 
@@ -59,16 +74,6 @@ const configs = {
       ["is_active", "Hali ya idara", "select", ["true", "false"]]
     ]
   },
-  attendance: {
-    table: "attendance",
-    title: "Mahudhurio",
-    fields: [
-      ["member_id", "Mshirika", "member"],
-      ["service_date", "Tarehe ya ibada", "date"],
-      ["service_type", "Aina ya ibada", "select", serviceTypes],
-      ["attended", "Amehudhuria", "select", ["true", "false"]]
-    ]
-  },
   events: {
     table: "church_events",
     title: "Matukio",
@@ -106,12 +111,6 @@ const empty = {
     description: "",
     is_active: "true"
   },
-  attendance: {
-    member_id: "",
-    service_date: today,
-    service_type: "JUMAPILI",
-    attended: "true"
-  },
   events: {
     event_name: "",
     event_date: today,
@@ -133,7 +132,6 @@ export default function App() {
   const [message, setMessage] = useState("");
   const [smsBusy, setSmsBusy] = useState(false);
 
-  // UCHAGUZI WA WAPOKEAJI WA SMS
   const [selectedSmsMembers, setSelectedSmsMembers] = useState([]);
   const [smsSearch, setSmsSearch] = useState("");
 
@@ -141,7 +139,6 @@ export default function App() {
   const [selectedMemberId, setSelectedMemberId] = useState("");
   const [printReport, setPrintReport] = useState(null);
 
-  // USIMAMIZI WA NENOSIRI
   const [showPassword, setShowPassword] = useState(false);
   const [showPasswordPanel, setShowPasswordPanel] = useState(false);
   const [newPassword, setNewPassword] = useState("");
@@ -162,17 +159,29 @@ export default function App() {
   const pastor = role === "mchungaji";
   const secretary = role === "katibu";
 
+  // KUTHIBITISHA AKAUNTI
   useEffect(() => {
     let active = true;
 
-    supabase.auth.getSession().then(({ data }) => {
-      if (active) setUser(data.session?.user || null);
+    supabase.auth.getSession().then(({ data, error }) => {
+      if (!active) return;
+
+      if (error) {
+        console.error("Session error:", error.message);
+        return;
+      }
+
+      setUser(data.session?.user || null);
     });
 
     const { data: listener } = supabase.auth.onAuthStateChange(
       (_event, session) => {
         setUser(session?.user || null);
-        if (!session) setProfile(null);
+
+        if (!session) {
+          setProfile(null);
+          setRows({});
+        }
       }
     );
 
@@ -183,17 +192,22 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (user) loadProfile();
-  }, [user]);
+    if (user?.id) {
+      loadProfile(user.id);
+    } else {
+      setProfile(null);
+    }
+  }, [user?.id]);
 
-  async function loadProfile() {
+  async function loadProfile(userId) {
     const { data, error } = await supabase
       .from("user_profiles")
       .select("*")
-      .eq("id", user.id)
+      .eq("id", userId)
       .single();
 
     if (error) {
+      console.error("Profile error:", error.message);
       alert("Imeshindwa kusoma nafasi ya mtumiaji: " + error.message);
       return;
     }
@@ -201,12 +215,13 @@ export default function App() {
     setProfile(data);
   }
 
-  // KUBADILI PASSWORD YA AKAUNTI
+  // KUBADILI PASSWORD
   async function changePassword(e) {
     e.preventDefault();
 
     if (newPassword.length < 6) {
-      return alert("Nenosiri jipya liwe na angalau herufi au namba 6.");
+      alert("Nenosiri jipya liwe na angalau herufi au namba 6.");
+      return;
     }
 
     setPasswordBusy(true);
@@ -218,7 +233,8 @@ export default function App() {
     setPasswordBusy(false);
 
     if (error) {
-      return alert("Imeshindwa kubadili nenosiri: " + error.message);
+      alert("Imeshindwa kubadili nenosiri: " + error.message);
+      return;
     }
 
     setNewPassword("");
@@ -228,6 +244,7 @@ export default function App() {
     alert("Nenosiri limebadilishwa kikamilifu.");
   }
 
+  // KUSOMA TAARIFA ZA MFUMO
   async function loadData() {
     setLoading(true);
 
@@ -244,9 +261,11 @@ export default function App() {
     const results = await Promise.all(
       tables.map(([table, orderColumn]) => {
         let query = supabase.from(table).select("*");
+
         if (orderColumn) {
           query = query.order(orderColumn, { ascending: false });
         }
+
         return query;
       })
     );
@@ -255,8 +274,9 @@ export default function App() {
 
     results.forEach((result, index) => {
       const table = tables[index][0];
+
       if (result.error) {
-        console.error(table, result.error.message);
+        console.error("Imeshindwa kusoma " + table, result.error.message);
         next[table] = [];
       } else {
         next[table] = result.data || [];
@@ -268,16 +288,19 @@ export default function App() {
   }
 
   useEffect(() => {
-    if (user && profile) loadData();
+    if (user && profile) {
+      loadData();
+    }
   }, [user, profile]);
 
+  // KUJAZA MAHUDHURIO YALIYOPO
   useEffect(() => {
     if (!Array.isArray(rows.members)) return;
 
     const checks = {};
 
     rows.members
-      .filter(member => member.is_active)
+      .filter(member => member.is_active === true)
       .forEach(member => {
         checks[member.id] = false;
       });
@@ -302,7 +325,9 @@ export default function App() {
       password
     });
 
-    if (error) alert(error.message);
+    if (error) {
+      alert("Imeshindwa kuingia: " + error.message);
+    }
   }
 
   async function logout() {
@@ -319,6 +344,11 @@ export default function App() {
   }
 
   function startEdit(row) {
+    if (!pastor) {
+      alert("Mchungaji pekee ndiye anayeruhusiwa kuhariri taarifa.");
+      return;
+    }
+
     setEditing(row.id);
     const values = {};
 
@@ -330,14 +360,19 @@ export default function App() {
   }
 
   function updateField(key, value) {
-    setDraft(previous => ({ ...previous, [key]: value }));
+    setDraft(previous => ({
+      ...previous,
+      [key]: value
+    }));
   }
 
+  // KUHIFADHI TAARIFA
   async function saveRecord(e) {
     e.preventDefault();
 
     if (!pastor && !secretary) {
-      return alert("Huna ruhusa ya kuhifadhi taarifa.");
+      alert("Huna ruhusa ya kuhifadhi taarifa.");
+      return;
     }
 
     const config = configs[tab];
@@ -346,7 +381,7 @@ export default function App() {
     config.fields.forEach(([key]) => {
       let value = draft[key];
 
-      if (["is_active", "attended"].includes(key)) {
+      if (["is_active"].includes(key)) {
         value = value === true || value === "true";
       }
 
@@ -354,25 +389,42 @@ export default function App() {
       payload[key] = value;
     });
 
-    if (tab === "members" && !payload.full_name) {
-      return alert("Tafadhali andika jina la mshirika.");
+    if (
+      (tab === "members" || tab === "visitors") &&
+      !payload.full_name
+    ) {
+      alert("Tafadhali andika jina kamili.");
+      return;
+    }
+
+    if (tab === "departments" && !payload.name) {
+      alert("Tafadhali andika jina la idara.");
+      return;
+    }
+
+    if (tab === "events" && !payload.event_name) {
+      alert("Tafadhali andika jina la tukio.");
+      return;
+    }
+
+    if (editing && !pastor) {
+      alert("Mchungaji pekee ndiye anayeruhusiwa kuhariri.");
+      return;
     }
 
     setLoading(true);
+
     let result;
 
     if (editing) {
-      if (!pastor) {
-        setLoading(false);
-        return alert("Mchungaji pekee ndiye anayeruhusiwa kuhariri.");
-      }
-
       result = await supabase
         .from(config.table)
         .update(payload)
         .eq("id", editing);
     } else {
-      result = await supabase.from(config.table).insert(payload);
+      result = await supabase
+        .from(config.table)
+        .insert(payload);
     }
 
     setLoading(false);
@@ -382,39 +434,58 @@ export default function App() {
       return;
     }
 
-    alert("Taarifa imehifadhiwa.");
+    alert("Taarifa imehifadhiwa kikamilifu.");
     setDraft({});
     setEditing(null);
     await loadData();
   }
 
+  // KUZIMA AU KUFUTA TAARIFA
   async function deleteRecord(id) {
     if (!pastor) {
-      return alert("Mchungaji pekee ndiye anayeruhusiwa kufuta.");
-    }
-
-    if (!window.confirm("Una uhakika unataka kufuta taarifa hii?")) return;
-
-    const config = configs[tab];
-    const { error } = await supabase
-      .from(config.table)
-      .delete()
-      .eq("id", id);
-
-    if (error) {
-      alert("Imeshindwa kufuta: " + error.message);
+      alert("Mchungaji pekee ndiye anayeruhusiwa kufanya kitendo hiki.");
       return;
     }
 
-    alert("Taarifa imefutwa.");
+    const config = configs[tab];
+
+    // Washirika na idara huzimwa badala ya kufutwa.
+    const isDeactivation = tab === "members" || tab === "departments";
+
+    const confirmation = isDeactivation
+      ? "Unataka kuzima taarifa hii? Haitatumika kama taarifa hai, lakini historia yake itabaki."
+      : "Una uhakika unataka kufuta taarifa hii?";
+
+    if (!window.confirm(confirmation)) return;
+
+    let result;
+
+    if (isDeactivation) {
+      result = await supabase
+        .from(config.table)
+        .update({ is_active: false })
+        .eq("id", id);
+    } else {
+      result = await supabase
+        .from(config.table)
+        .delete()
+        .eq("id", id);
+    }
+
+    if (result.error) {
+      alert("Imeshindwa kukamilisha kitendo: " + result.error.message);
+      return;
+    }
+
+    alert(isDeactivation ? "Taarifa imezimwa." : "Taarifa imefutwa.");
     await loadData();
   }
 
-  // USAJILI WA WASHIRIKA KWENYE IDARA
-
+  // IDARA: KUSOMA WASHIRIKA WA IDARA
   async function openDepartmentMembers(department) {
     if (!pastor && !secretary) {
-      return alert("Huna ruhusa ya kusimamia washirika wa idara.");
+      alert("Huna ruhusa ya kusimamia washirika wa idara.");
+      return;
     }
 
     setLoading(true);
@@ -432,11 +503,23 @@ export default function App() {
       return;
     }
 
-    setDepartmentMemberIds((data || []).map(item => item.member_id));
+    setDepartmentMemberIds(
+      (data || []).map(item => item.member_id)
+    );
+
     setSelectedDepartment(department);
   }
 
   function toggleDepartmentMember(memberId) {
+    // Katibu haruhusiwi kuondoa mshirika aliyesajiliwa tayari.
+    if (
+      secretary &&
+      !pastor &&
+      departmentMemberIds.includes(memberId)
+    ) {
+      return;
+    }
+
     setDepartmentMemberIds(previous =>
       previous.includes(memberId)
         ? previous.filter(id => id !== memberId)
@@ -447,27 +530,40 @@ export default function App() {
   function toggleAllDepartmentMembers(members) {
     const allSelected =
       members.length > 0 &&
-      members.every(member => departmentMemberIds.includes(member.id));
+      members.every(member =>
+        departmentMemberIds.includes(member.id)
+      );
 
     if (allSelected) {
+      // Katibu hawezi kuondoa waliopo tayari.
+      if (secretary && !pastor) return;
+
       setDepartmentMemberIds(previous =>
-        previous.filter(id => !members.some(member => member.id === id))
+        previous.filter(id =>
+          !members.some(member => member.id === id)
+        )
       );
     } else {
       setDepartmentMemberIds(previous => [
-        ...new Set([...previous, ...members.map(member => member.id)])
+        ...new Set([
+          ...previous,
+          ...members.map(member => member.id)
+        ])
       ]);
     }
   }
 
+  // KUHIFADHI WANACHAMA WA IDARA
   async function saveDepartmentMembers() {
     if (!pastor && !secretary) {
-      return alert("Huna ruhusa ya kusajili washirika kwenye idara.");
+      alert("Huna ruhusa ya kusajili washirika kwenye idara.");
+      return;
     }
 
     if (!selectedDepartment || departmentSaving) return;
 
     setDepartmentSaving(true);
+
     const departmentId = selectedDepartment.id;
 
     const { data: existing, error: readError } = await supabase
@@ -477,13 +573,21 @@ export default function App() {
 
     if (readError) {
       setDepartmentSaving(false);
-      return alert("Imeshindwa kusoma taarifa za idara: " + readError.message);
+      alert("Imeshindwa kusoma taarifa za idara: " + readError.message);
+      return;
     }
 
     const oldIds = (existing || []).map(item => item.member_id);
-    const toAdd = departmentMemberIds.filter(id => !oldIds.includes(id));
-    const toRemove = oldIds.filter(id => !departmentMemberIds.includes(id));
 
+    const toAdd = departmentMemberIds.filter(
+      id => !oldIds.includes(id)
+    );
+
+    const toRemove = oldIds.filter(
+      id => !departmentMemberIds.includes(id)
+    );
+
+    // Kuongeza wanachama wapya.
     if (toAdd.length > 0) {
       const records = toAdd.map(memberId => ({
         member_id: memberId,
@@ -496,11 +600,13 @@ export default function App() {
 
       if (error) {
         setDepartmentSaving(false);
-        return alert("Imeshindwa kusajili washirika wapya: " + error.message);
+        alert("Imeshindwa kusajili washirika wapya: " + error.message);
+        return;
       }
     }
 
-    if (toRemove.length > 0) {
+    // Kuondoa wanachama: mchungaji pekee.
+    if (pastor && toRemove.length > 0) {
       const { error } = await supabase
         .from("member_departments")
         .delete()
@@ -510,34 +616,53 @@ export default function App() {
       if (error) {
         setDepartmentSaving(false);
         await loadData();
-        return alert("Baadhi ya mabadiliko hayajakamilika: " + error.message);
+        alert("Imeshindwa kuondoa baadhi ya washirika: " + error.message);
+        return;
       }
     }
 
     setDepartmentSaving(false);
-    alert("Washirika wa idara " + selectedDepartment.name + " wamehifadhiwa.");
+
+    alert(
+      "Washirika wa idara " +
+      selectedDepartment.name +
+      " wamehifadhiwa."
+    );
 
     setSelectedDepartment(null);
     setDepartmentMemberIds([]);
     setDepartmentSearch("");
+
     await loadData();
   }
 
   // MAHUDHURIO
-
   async function saveAllAttendance() {
     if (!pastor && !secretary) {
-      return alert("Huna ruhusa ya kuhifadhi mahudhurio.");
+      alert("Huna ruhusa ya kuhifadhi mahudhurio.");
+      return;
     }
 
-    const members = (rows.members || []).filter(member => member.is_active);
+    const members = (rows.members || []).filter(
+      member => member.is_active === true
+    );
 
-    if (!members.length) return alert("Hakuna washirika hai.");
+    if (!members.length) {
+      alert("Hakuna washirika hai.");
+      return;
+    }
 
-    if (!window.confirm(
-      "Unahifadhi mahudhurio ya washirika " + members.length +
-      " kwa tarehe " + attendanceDate + " — " + attendanceType + "?"
-    )) return;
+    const confirmed = window.confirm(
+      "Unahifadhi mahudhurio ya washirika " +
+      members.length +
+      " kwa tarehe " +
+      attendanceDate +
+      " — " +
+      attendanceType +
+      "?"
+    );
+
+    if (!confirmed) return;
 
     setAttendanceSaving(true);
 
@@ -549,15 +674,18 @@ export default function App() {
 
     if (checkError) {
       setAttendanceSaving(false);
-      return alert("Hitilafu: " + checkError.message);
+      alert("Hitilafu: " + checkError.message);
+      return;
     }
 
+    // Katibu hawezi kuandika upya mahudhurio yaliyopo.
     if (secretary && !pastor && (existing || []).length > 0) {
       setAttendanceSaving(false);
-      return alert(
+      alert(
         "Mahudhurio ya ibada hii tayari yamehifadhiwa. " +
         "Mchungaji ndiye anayeruhusiwa kufanya marekebisho."
       );
+      return;
     }
 
     const records = members.map(member => ({
@@ -570,25 +698,29 @@ export default function App() {
     let result;
 
     if (pastor) {
-      result = await supabase.from("attendance").upsert(records, {
-        onConflict: "member_id,service_date,service_type"
-      });
+      result = await supabase
+        .from("attendance")
+        .upsert(records, {
+          onConflict: "member_id,service_date,service_type"
+        });
     } else {
-      result = await supabase.from("attendance").insert(records);
+      result = await supabase
+        .from("attendance")
+        .insert(records);
     }
 
     setAttendanceSaving(false);
 
     if (result.error) {
-      return alert("Imeshindwa kuhifadhi mahudhurio: " + result.error.message);
+      alert("Imeshindwa kuhifadhi mahudhurio: " + result.error.message);
+      return;
     }
 
     alert("Mahudhurio yamehifadhiwa kikamilifu.");
     await loadData();
   }
 
-  // SMS: WAPOKEAJI WANAOWEZA KUCHAGULIWA
-
+  // SMS: WAPOKEAJI WENYE NAMBA ZA SIMU
   function getSmsEligibleMembers() {
     return (rows.members || [])
       .filter(member =>
@@ -618,19 +750,20 @@ export default function App() {
     setSelectedSmsMembers([]);
   }
 
-  // KUTUMA SMS KWA WALIOCHAGULIWA TU
-
+  // KUTUMA SMS
   async function sendSMS(e) {
     e.preventDefault();
 
     if (!pastor) {
-      return alert("Mchungaji pekee ndiye anayeruhusiwa kutuma SMS.");
+      alert("Mchungaji pekee ndiye anayeruhusiwa kutuma SMS.");
+      return;
     }
 
     const cleanMessage = message.trim();
 
     if (!cleanMessage) {
-      return alert("Tafadhali andika ujumbe wa SMS.");
+      alert("Tafadhali andika ujumbe wa SMS.");
+      return;
     }
 
     const members = getSmsEligibleMembers().filter(member =>
@@ -638,11 +771,14 @@ export default function App() {
     );
 
     if (!members.length) {
-      return alert("Tafadhali chagua angalau mshirika mmoja.");
+      alert("Tafadhali chagua angalau mshirika mmoja.");
+      return;
     }
 
     if (!window.confirm(
-      "Unataka kutuma SMS kwa washirika " + members.length + " uliochagua?"
+      "Unataka kutuma SMS kwa washirika " +
+      members.length +
+      " uliochagua?"
     )) {
       return;
     }
@@ -657,19 +793,24 @@ export default function App() {
       let status = "failed";
 
       try {
-        const { data, error } = await supabase.functions.invoke("send-sms", {
-          body: {
-            phone: member.phone,
-            message: cleanMessage
+        const { data, error } = await supabase.functions.invoke(
+          "send-sms",
+          {
+            body: {
+              phone: member.phone,
+              message: cleanMessage
+            }
           }
-        });
+        );
 
-        if (!error && data?.success !== false) {
+        // Mafanikio yanakubaliwa tu pale API inaposema success: true.
+        if (!error && data?.success === true) {
           status = "sent";
           sent++;
         } else {
           failed++;
           failedIds.push(member.id);
+
           console.error(
             "SMS imeshindwa kwa " + member.phone,
             error || data
@@ -690,14 +831,16 @@ export default function App() {
         });
 
       if (historyError) {
-        console.error("Imeshindwa kuhifadhi historia ya SMS:", historyError);
+        console.error(
+          "Imeshindwa kuhifadhi historia ya SMS:",
+          historyError
+        );
       }
     }
 
     setSmsBusy(false);
 
-    // Waliopokea vizuri wanaondolewa kwenye uchaguzi.
-    // Walioshindwa wanabaki wamechaguliwa ili waweze kujaribiwa tena.
+    // Walioshindwa wanabaki wamechaguliwa.
     setSelectedSmsMembers(failedIds);
 
     if (failed === 0) {
@@ -705,8 +848,8 @@ export default function App() {
     }
 
     alert(
-      "SMS zilizotumwa vizuri: " + sent +
-      "\nSMS zilizoshindwa: " + failed +
+      "SMS zilizothibitishwa kuwa zimetumwa: " + sent +
+      "\nSMS zilizoshindwa au ambazo hazijathibitishwa: " + failed +
       (failed > 0
         ? "\nWalioshindwa wamebaki wamechaguliwa ili ujaribu tena."
         : "\nUjumbe umetumwa kwa wote uliochagua.")
@@ -715,8 +858,7 @@ export default function App() {
     await loadData();
   }
 
-  // FIELDS
-
+  // FIELDS ZA FOMU
   function renderField(field) {
     const [key, label, type, options] = field;
     const value = draft[key] ?? "";
@@ -734,27 +876,22 @@ export default function App() {
       );
     }
 
-    if (type === "member") {
-      return (
-        <label key={key}>
-          {label}
-          <select value={value} required onChange={e => updateField(key, e.target.value)}>
-            <option value="">Chagua mshirika</option>
-            {(rows.members || []).filter(member => member.is_active).map(member => (
-              <option key={member.id} value={member.id}>{member.full_name}</option>
-            ))}
-          </select>
-        </label>
-      );
-    }
-
     if (type === "select") {
       return (
         <label key={key}>
           {label}
-          <select value={value} onChange={e => updateField(key, e.target.value)}>
+          <select
+            value={value}
+            onChange={e => updateField(key, e.target.value)}
+          >
             {options.map(option => (
-              <option key={option} value={option}>{option}</option>
+              <option key={option} value={option}>
+                {option === "true"
+                  ? "Hai / Ndiyo"
+                  : option === "false"
+                    ? "Hapana / Haifanyi kazi"
+                    : option}
+              </option>
             ))}
           </select>
         </label>
@@ -768,8 +905,9 @@ export default function App() {
           type={type}
           value={value}
           required={[
-            "full_name", "name", "event_name", "member_id",
-            "service_date", "event_date"
+            "full_name",
+            "name",
+            "event_name"
           ].includes(key)}
           onChange={e => updateField(key, e.target.value)}
         />
@@ -777,15 +915,21 @@ export default function App() {
     );
   }
 
-  // RIPOTI NA PDF
-
+  // RIPOTI
   function printNow(report) {
     setPrintReport(report);
-    setTimeout(() => window.print(), 700);
+
+    setTimeout(() => {
+      window.print();
+    }, 700);
   }
 
-  function makeSection(title, headers, rows) {
-    return { title, headers, rows };
+  function makeSection(title, headers, reportRows) {
+    return {
+      title,
+      headers,
+      rows: reportRows
+    };
   }
 
   function getMemberDepartmentReport() {
@@ -802,13 +946,15 @@ export default function App() {
 
       const assignedMembers = members
         .filter(member => assignedIds.includes(member.id))
-        .sort((a, b) => (a.full_name || "").localeCompare(b.full_name || ""));
+        .sort((a, b) =>
+          (a.full_name || "").localeCompare(b.full_name || "")
+        );
 
       if (assignedMembers.length === 0) {
         reportRows.push([
           department.name,
-          "Hakuna mshirika aliyesajiliwa",
           "—",
+          "Hakuna mshirika aliyesajiliwa",
           "—",
           "—"
         ]);
@@ -825,10 +971,15 @@ export default function App() {
       }
     });
 
-    const assignedIds = new Set(links.map(link => link.member_id));
+    const assignedIds = new Set(
+      links.map(link => link.member_id)
+    );
+
     const unassigned = members
       .filter(member => !assignedIds.has(member.id))
-      .sort((a, b) => (a.full_name || "").localeCompare(b.full_name || ""));
+      .sort((a, b) =>
+        (a.full_name || "").localeCompare(b.full_name || "")
+      );
 
     unassigned.forEach(member => {
       reportRows.push([
@@ -878,6 +1029,7 @@ export default function App() {
 
     filtered.forEach(item => {
       const key = item.service_date + "|" + item.service_type;
+
       if (!sessionsMap.has(key)) {
         sessionsMap.set(key, {
           date: item.service_date,
@@ -890,12 +1042,18 @@ export default function App() {
 
       const session = sessionsMap.get(key);
       session.total++;
-      if (item.attended === true) session.present++;
-      else session.absent++;
+
+      if (item.attended === true) {
+        session.present++;
+      } else {
+        session.absent++;
+      }
     });
 
     const sessionRows = [...sessionsMap.values()]
-      .sort((a, b) => (b.date || "").localeCompare(a.date || ""))
+      .sort((a, b) =>
+        (b.date || "").localeCompare(a.date || "")
+      )
       .map((session, index) => [
         index + 1,
         session.date,
@@ -911,11 +1069,15 @@ export default function App() {
     const sessions = [...new Set(
       attendance
         .filter(item => item.service_date <= today)
-        .map(item => item.service_date + "|" + item.service_type)
+        .map(item =>
+          item.service_date + "|" + item.service_type
+        )
     )];
 
     const individualRows = [...members]
-      .sort((a, b) => (a.full_name || "").localeCompare(b.full_name || ""))
+      .sort((a, b) =>
+        (a.full_name || "").localeCompare(b.full_name || "")
+      )
       .map((member, index) => {
         const joinedOn = member.joined_on || "0000-00-00";
 
@@ -925,9 +1087,12 @@ export default function App() {
         });
 
         const expectedKeys = new Set(expectedSessions);
+
         const memberRecords = attendance.filter(item =>
           item.member_id === member.id &&
-          expectedKeys.has(item.service_date + "|" + item.service_type)
+          expectedKeys.has(
+            item.service_date + "|" + item.service_type
+          )
         );
 
         const attendedCount = memberRecords.filter(
@@ -935,6 +1100,7 @@ export default function App() {
         ).length;
 
         const expectedCount = expectedSessions.length;
+
         const percentage = expectedCount
           ? Math.round((attendedCount / expectedCount) * 100)
           : 0;
@@ -952,12 +1118,27 @@ export default function App() {
     return [
       makeSection(
         "MUHTASARI WA MAHUDHURIO KWA IBADA",
-        ["Na.", "Tarehe", "Aina ya ibada", "Walioandikishwa", "Waliohudhuria", "Hawakuhudhuria", "Asilimia"],
+        [
+          "Na.",
+          "Tarehe",
+          "Aina ya ibada",
+          "Walioandikishwa",
+          "Waliohudhuria",
+          "Hawakuhudhuria",
+          "Asilimia"
+        ],
         sessionRows
       ),
       makeSection(
         "MUHTASARI WA MAHUDHURIO KWA KILA MSHIRIKA",
-        ["Na.", "Jina", "Namba", "Amehudhuria", "Ibada zilizorekodiwa", "Asilimia"],
+        [
+          "Na.",
+          "Jina",
+          "Namba",
+          "Amehudhuria",
+          "Ibada zilizorekodiwa",
+          "Asilimia"
+        ],
         individualRows
       )
     ];
@@ -965,10 +1146,17 @@ export default function App() {
 
   function getEventsReportSections() {
     const events = [...(rows.church_events || [])]
-      .sort((a, b) => (a.event_date || "").localeCompare(b.event_date || ""));
+      .sort((a, b) =>
+        (a.event_date || "").localeCompare(b.event_date || "")
+      );
 
-    const completed = events.filter(event => event.event_date < today);
-    const upcoming = events.filter(event => event.event_date >= today);
+    const completed = events.filter(
+      event => event.event_date < today
+    );
+
+    const upcoming = events.filter(
+      event => event.event_date >= today
+    );
 
     const convert = list => list.map((event, index) => [
       index + 1,
@@ -1027,7 +1215,8 @@ export default function App() {
 
   function printMasterPDF() {
     if (!pastor) {
-      return alert("Mchungaji pekee ndiye anayeruhusiwa kutoa ripoti kuu.");
+      alert("Mchungaji pekee ndiye anayeruhusiwa kutoa ripoti kuu.");
+      return;
     }
 
     printNow({
@@ -1047,22 +1236,36 @@ export default function App() {
       item => item.id === selectedMemberId
     );
 
-    if (!member) return alert("Tafadhali chagua mshirika kwanza.");
+    if (!member) {
+      alert("Tafadhali chagua mshirika kwanza.");
+      return;
+    }
 
     const attendance = (rows.attendance || [])
       .filter(item => item.member_id === member.id)
-      .sort((a, b) => (b.service_date || "").localeCompare(a.service_date || ""));
+      .sort((a, b) =>
+        (b.service_date || "").localeCompare(a.service_date || "")
+      );
 
     const joinedOn = member.joined_on || "0000-00-00";
 
     const sessions = new Set(
       (rows.attendance || [])
-        .filter(item => item.service_date >= joinedOn && item.service_date <= today)
-        .map(item => item.service_date + "|" + item.service_type)
+        .filter(item =>
+          item.service_date >= joinedOn &&
+          item.service_date <= today
+        )
+        .map(item =>
+          item.service_date + "|" + item.service_type
+        )
     );
 
-    const attendedCount = attendance.filter(item => item.attended === true).length;
+    const attendedCount = attendance.filter(
+      item => item.attended === true
+    ).length;
+
     const expectedCount = sessions.size;
+
     const percentage = expectedCount
       ? Math.round((attendedCount / expectedCount) * 100)
       : 0;
@@ -1093,11 +1296,12 @@ export default function App() {
   }
 
   // UKURASA WA MAHUDHURIO
-
   function renderAttendancePage() {
     const members = (rows.members || [])
-      .filter(member => member.is_active)
-      .sort((a, b) => (a.full_name || "").localeCompare(b.full_name || ""));
+      .filter(member => member.is_active === true)
+      .sort((a, b) =>
+        (a.full_name || "").localeCompare(b.full_name || "")
+      );
 
     const presentCount = members.filter(
       member => attendanceChecks[member.id] === true
@@ -1125,18 +1329,32 @@ export default function App() {
             onChange={e => setAttendanceType(e.target.value)}
           >
             {serviceTypes.map(type => (
-              <option key={type} value={type}>{type}</option>
+              <option key={type} value={type}>
+                {type}
+              </option>
             ))}
           </select>
         </label>
 
         <div className="stats">
-          <article>Washirika wote<strong>{members.length}</strong></article>
-          <article>Waliohudhuria<strong>{presentCount}</strong></article>
-          <article>Wasiokuwepo<strong>{absentCount}</strong></article>
+          <article>
+            Washirika wote
+            <strong>{members.length}</strong>
+          </article>
+
+          <article>
+            Waliohudhuria
+            <strong>{presentCount}</strong>
+          </article>
+
+          <article>
+            Wasiokuwepo
+            <strong>{absentCount}</strong>
+          </article>
         </div>
 
         <h3>WEKA TIKI KWA WALIOHUDHURIA</h3>
+
         <p>
           Weka tiki kwenye kisanduku cha kila mshirika aliyefika ibadani.
           Wasiowekwa tiki watahesabiwa kuwa hawakuhudhuria.
@@ -1162,16 +1380,25 @@ export default function App() {
                   ...previous,
                   [member.id]: e.target.checked
                 }))}
-                style={{ width: "24px", height: "24px", flexShrink: 0 }}
+                style={{
+                  width: "24px",
+                  height: "24px",
+                  flexShrink: 0
+                }}
               />
+
               <span>
                 {index + 1}. {member.full_name}
-                {member.member_number ? " — " + member.member_number : ""}
+                {member.member_number
+                  ? " — " + member.member_number
+                  : ""}
               </span>
             </label>
           ))}
 
-          {!members.length && <p>Hakuna washirika hai waliopatikana.</p>}
+          {!members.length && (
+            <p>Hakuna washirika hai waliopatikana.</p>
+          )}
         </div>
 
         {(pastor || secretary) && (
@@ -1180,26 +1407,32 @@ export default function App() {
             onClick={saveAllAttendance}
             disabled={attendanceSaving || !members.length}
           >
-            {attendanceSaving ? "INAHIFADHI..." : "HIFADHI MAHUDHURIO YOTE"}
+            {attendanceSaving
+              ? "INAHIFADHI..."
+              : "HIFADHI MAHUDHURIO YOTE"}
           </button>
         )}
       </div>
     );
   }
 
-  // UKURASA WA IDARA NA TAARIFA ZINGINE
-
+  // UKURASA WA FOMU ZA TAARIFA
   function renderFormPage() {
     const config = configs[tab];
     const data = rows[config.table] || [];
 
+    // USIMAMIZI WA WASHIRIKA WA IDARA
     if (tab === "departments" && selectedDepartment) {
       const members = (rows.members || [])
         .filter(member =>
-          member.is_active &&
-          (member.full_name || "").toLowerCase().includes(departmentSearch.toLowerCase())
+          member.is_active === true &&
+          (member.full_name || "")
+            .toLowerCase()
+            .includes(departmentSearch.toLowerCase())
         )
-        .sort((a, b) => (a.full_name || "").localeCompare(b.full_name || ""));
+        .sort((a, b) =>
+          (a.full_name || "").localeCompare(b.full_name || "")
+        );
 
       return (
         <div>
@@ -1216,11 +1449,24 @@ export default function App() {
 
           <h2>{selectedDepartment.name}</h2>
           <h3>SAJILI WASHIRIKA KWENYE IDARA HII</h3>
-          <p>Chagua washirika unaotaka wawe wanachama wa idara hii.</p>
+
+          <p>
+            Chagua washirika unaotaka wawe wanachama wa idara hii.
+            {secretary && !pastor
+              ? " Katibu anaweza kuongeza washirika wapya tu."
+              : " Mchungaji anaweza kuongeza au kuondoa washirika."}
+          </p>
 
           <div className="stats">
-            <article>Washirika waliochaguliwa<strong>{departmentMemberIds.length}</strong></article>
-            <article>Washirika wanaoonekana<strong>{members.length}</strong></article>
+            <article>
+              Washirika waliochaguliwa
+              <strong>{departmentMemberIds.length}</strong>
+            </article>
+
+            <article>
+              Washirika wanaoonekana
+              <strong>{members.length}</strong>
+            </article>
           </div>
 
           <input
@@ -1237,46 +1483,71 @@ export default function App() {
               alignItems: "center",
               gap: "12px",
               padding: "12px",
-              cursor: "pointer"
+              cursor: pastor ? "pointer" : "default"
             }}
           >
             <input
               type="checkbox"
               checked={
                 members.length > 0 &&
-                members.every(member => departmentMemberIds.includes(member.id))
+                members.every(member =>
+                  departmentMemberIds.includes(member.id)
+                )
               }
               onChange={() => toggleAllDepartmentMembers(members)}
+              disabled={secretary && !pastor}
             />
+
             <strong>CHAGUA WOTE WALIOONYESHWA</strong>
           </label>
 
           <div className="record-list">
-            {members.map((member, index) => (
-              <label
-                key={member.id}
-                className="record"
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "12px",
-                  padding: "12px",
-                  cursor: "pointer"
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={departmentMemberIds.includes(member.id)}
-                  onChange={() => toggleDepartmentMember(member.id)}
-                  style={{ width: "22px", height: "22px", flexShrink: 0 }}
-                />
-                <span>
-                  {index + 1}. {member.full_name}
-                  {member.member_number ? " — " + member.member_number : ""}
-                </span>
-              </label>
-            ))}
-            {!members.length && <p>Hakuna washirika hai waliopatikana.</p>}
+            {members.map((member, index) => {
+              const alreadyAssigned =
+                departmentMemberIds.includes(member.id);
+
+              return (
+                <label
+                  key={member.id}
+                  className="record"
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "12px",
+                    padding: "12px",
+                    cursor: "pointer"
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={alreadyAssigned}
+                    onChange={() => toggleDepartmentMember(member.id)}
+                    disabled={
+                      secretary && !pastor && alreadyAssigned
+                    }
+                    style={{
+                      width: "22px",
+                      height: "22px",
+                      flexShrink: 0
+                    }}
+                  />
+
+                  <span>
+                    {index + 1}. {member.full_name}
+                    {member.member_number
+                      ? " — " + member.member_number
+                      : ""}
+                    {alreadyAssigned && secretary && !pastor
+                      ? " (Tayari yupo)"
+                      : ""}
+                  </span>
+                </label>
+              );
+            })}
+
+            {!members.length && (
+              <p>Hakuna washirika hai waliopatikana.</p>
+            )}
           </div>
 
           <button
@@ -1284,14 +1555,18 @@ export default function App() {
             onClick={saveDepartmentMembers}
             disabled={departmentSaving}
           >
-            {departmentSaving ? "INAHIFADHI..." : "HIFADHI WASHIRIKA WALIOCHAGULIWA"}
+            {departmentSaving
+              ? "INAHIFADHI..."
+              : "HIFADHI WASHIRIKA WALIOCHAGULIWA"}
           </button>
         </div>
       );
     }
 
     const filtered = data.filter(row =>
-      JSON.stringify(row).toLowerCase().includes(search.toLowerCase())
+      JSON.stringify(row)
+        .toLowerCase()
+        .includes(search.toLowerCase())
     );
 
     return (
@@ -1305,12 +1580,15 @@ export default function App() {
         />
 
         {(pastor || secretary) && !editing && (
-          <button type="button" onClick={startNew}>+ Ongeza taarifa</button>
+          <button type="button" onClick={startNew}>
+            + Ongeza taarifa
+          </button>
         )}
 
         {Object.keys(draft).length > 0 && (
           <form onSubmit={saveRecord} className="record-form">
             <h3>{editing ? "Hariri taarifa" : "Taarifa mpya"}</h3>
+
             {config.fields.map(field => renderField(field))}
 
             <button disabled={loading}>
@@ -1338,10 +1616,15 @@ export default function App() {
                 <>
                   <h3>{row.name}</h3>
                   <p>{row.description || "Hakuna maelezo."}</p>
-                  <p>Hali: {row.is_active ? "Hai" : "Haifanyi kazi"}</p>
+                  <p>
+                    Hali: {row.is_active ? "Hai" : "Haifanyi kazi"}
+                  </p>
 
                   {(pastor || secretary) && (
-                    <button type="button" onClick={() => openDepartmentMembers(row)}>
+                    <button
+                      type="button"
+                      onClick={() => openDepartmentMembers(row)}
+                    >
                       FUNGUA NA SAJILI WASHIRIKA
                     </button>
                   )}
@@ -1357,65 +1640,98 @@ export default function App() {
                 config.fields.map(([key, label]) => (
                   <p key={key}>
                     <strong>{label}:</strong>{" "}
-                    {key === "member_id"
-                      ? (rows.members || []).find(member => member.id === row[key])?.full_name || "—"
-                      : key === "is_active"
-                        ? (row[key] ? "Hai" : "Haifanyi kazi")
-                        : key === "attended"
-                          ? (row[key] ? "Amehudhuria" : "Hakuhudhuria")
-                          : String(row[key] ?? "—")}
+                    {key === "is_active"
+                      ? (row[key] ? "Hai" : "Haifanyi kazi")
+                      : String(row[key] ?? "—")}
                   </p>
                 ))
               )}
 
               {pastor && (
                 <div className="actions">
-                  <button type="button" onClick={() => startEdit(row)}>Hariri</button>
-                  <button type="button" onClick={() => deleteRecord(row.id)}>Futa</button>
+                  <button
+                    type="button"
+                    onClick={() => startEdit(row)}
+                  >
+                    Hariri
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => deleteRecord(row.id)}
+                  >
+                    {tab === "members" || tab === "departments"
+                      ? "Zima"
+                      : "Futa"}
+                  </button>
                 </div>
               )}
             </article>
           ))}
 
-          {!filtered.length && <p>Hakuna taarifa zilizopatikana.</p>}
+          {!filtered.length && (
+            <p>Hakuna taarifa zilizopatikana.</p>
+          )}
         </div>
       </>
     );
   }
 
   // DASHBOARD
-
   function renderDashboard() {
+    const events = (rows.church_events || [])
+      .filter(event => event.event_date >= today)
+      .sort((a, b) =>
+        a.event_date.localeCompare(b.event_date)
+      );
+
     return (
       <>
         <h2>Muhtasari wa kanisa</h2>
 
         <div className="stats">
-          <article>Washirika<strong>{(rows.members || []).length}</strong></article>
-          <article>Wageni<strong>{(rows.visitors || []).length}</strong></article>
-          <article>Idara<strong>{(rows.departments || []).length}</strong></article>
-          <article>Mahudhurio<strong>{(rows.attendance || []).length}</strong></article>
-          <article>Matukio<strong>{(rows.church_events || []).length}</strong></article>
+          <article>
+            Washirika
+            <strong>{(rows.members || []).length}</strong>
+          </article>
+
+          <article>
+            Wageni
+            <strong>{(rows.visitors || []).length}</strong>
+          </article>
+
+          <article>
+            Idara
+            <strong>{(rows.departments || []).length}</strong>
+          </article>
+
+          <article>
+            Mahudhurio
+            <strong>{(rows.attendance || []).length}</strong>
+          </article>
+
+          <article>
+            Matukio
+            <strong>{(rows.church_events || []).length}</strong>
+          </article>
         </div>
 
         <h3>Matukio yajayo</h3>
 
-        {(rows.church_events || [])
-          .filter(event => event.event_date >= today)
-          .sort((a, b) => a.event_date.localeCompare(b.event_date))
-          .map(event => (
-            <article className="record" key={event.id}>
-              <strong>{event.event_name}</strong>
-              <p>{event.event_date}</p>
-              <p>{event.description}</p>
-            </article>
-          ))}
+        {events.map(event => (
+          <article className="record" key={event.id}>
+            <strong>{event.event_name}</strong>
+            <p>{event.event_date}</p>
+            <p>{event.description}</p>
+          </article>
+        ))}
+
+        {!events.length && <p>Hakuna matukio yajayo yaliyosajiliwa.</p>}
       </>
     );
   }
 
-  // UKURASA MPYA WA SMS: UCHAGUZI WA WAPOKEAJI
-
+  // UKURASA WA SMS
   function renderSMSPage() {
     const eligibleMembers = getSmsEligibleMembers();
 
@@ -1456,8 +1772,8 @@ export default function App() {
             </div>
 
             <p>
-              Weka tiki kwa mshirika mmoja au zaidi. Unaweza pia kuchagua
-              washirika wote.
+              Weka tiki kwa mshirika mmoja au zaidi. Unaweza pia
+              kuchagua washirika wote.
             </p>
 
             <input
@@ -1558,7 +1874,7 @@ export default function App() {
                 </label>
               ))}
 
-              {visibleMembers.length === 0 && (
+              {!visibleMembers.length && (
                 <p>Hakuna mshirika aliyepatikana kwa utafutaji huo.</p>
               )}
             </div>
@@ -1587,7 +1903,11 @@ export default function App() {
 
             <button
               type="submit"
-              disabled={smsBusy || selectedCount === 0 || !message.trim()}
+              disabled={
+                smsBusy ||
+                selectedCount === 0 ||
+                !message.trim()
+              }
               style={{
                 width: "100%",
                 minHeight: "50px",
@@ -1609,7 +1929,11 @@ export default function App() {
           <article className="record" key={sms.id}>
             <p>{sms.phone}</p>
             <p>{sms.message}</p>
-            <p>{sms.status}</p>
+            <p>
+              Hali: {sms.status === "sent"
+                ? "Imethibitishwa kuwa imetumwa"
+                : "Imeshindwa / Haijathibitishwa"}
+            </p>
             <small>{sms.sent_at}</small>
           </article>
         ))}
@@ -1618,7 +1942,6 @@ export default function App() {
   }
 
   // RIPOTI
-
   function renderReports() {
     const members = rows.members || [];
     const visitors = rows.visitors || [];
@@ -1634,11 +1957,32 @@ export default function App() {
         <h2>RIPOTI ZA KANISA</h2>
 
         <div className="stats">
-          <article>Washirika<strong>{members.length}</strong></article>
-          <article>Washirika hai<strong>{members.filter(m => m.is_active).length}</strong></article>
-          <article>Wageni<strong>{visitors.length}</strong></article>
-          <article>Waliohudhuria<strong>{filteredAttendance.filter(a => a.attended === true).length}</strong></article>
-          <article>Matukio<strong>{events.length}</strong></article>
+          <article>
+            Washirika
+            <strong>{members.length}</strong>
+          </article>
+
+          <article>
+            Washirika hai
+            <strong>{members.filter(m => m.is_active).length}</strong>
+          </article>
+
+          <article>
+            Wageni
+            <strong>{visitors.length}</strong>
+          </article>
+
+          <article>
+            Waliohudhuria
+            <strong>
+              {filteredAttendance.filter(a => a.attended === true).length}
+            </strong>
+          </article>
+
+          <article>
+            Matukio
+            <strong>{events.length}</strong>
+          </article>
         </div>
 
         <h3>RIPOTI ZA PDF</h3>
@@ -1672,7 +2016,10 @@ export default function App() {
         {pastor && (
           <>
             <h3>RIPOTI KUU YA MCHUNGAJI</h3>
-            <p>Ripoti hii ina sehemu zote nne katika PDF moja.</p>
+            <p>
+              Ripoti hii ina washirika, wageni, mahudhurio na matukio.
+            </p>
+
             <button type="button" onClick={printMasterPDF}>
               PAKUA PDF KUU YA KANISA
             </button>
@@ -1690,37 +2037,48 @@ export default function App() {
             onChange={e => setSelectedMemberId(e.target.value)}
           >
             <option value="">-- Chagua mshirika --</option>
+
             {members
-              .filter(member => member.is_active)
-              .sort((a, b) => (a.full_name || "").localeCompare(b.full_name || ""))
+              .filter(member => member.is_active === true)
+              .sort((a, b) =>
+                (a.full_name || "").localeCompare(b.full_name || "")
+              )
               .map(member => (
                 <option key={member.id} value={member.id}>
                   {member.full_name}
-                  {member.member_number ? " - " + member.member_number : ""}
+                  {member.member_number
+                    ? " - " + member.member_number
+                    : ""}
                 </option>
               ))}
           </select>
         </label>
 
-        <button type="button" onClick={printIndividualAttendance}>
+        <button
+          type="button"
+          onClick={printIndividualAttendance}
+        >
           PAKUA PDF YA MAHUDHURIO YAKE
         </button>
 
         <h3>Muhtasari wa mahudhurio</h3>
+
         {filteredAttendance.map(item => (
           <p key={item.id}>
             {(members.find(m => m.id === item.member_id)?.full_name || "Mshirika")}
-            {" — "}{item.service_date}
-            {" — "}{item.service_type}
-            {" — "}{item.attended ? "Amehudhuria" : "Hakuhudhuria"}
+            {" — "}
+            {item.service_date}
+            {" — "}
+            {item.service_type}
+            {" — "}
+            {item.attended ? "Amehudhuria" : "Hakuhudhuria"}
           </p>
         ))}
       </div>
     );
   }
 
-  // LOGIN - KISANDUKU KIKUBWA CHA PASSWORD
-
+  // UKURASA WA KUINGIA
   if (!user) {
     return (
       <main className="login">
@@ -1745,13 +2103,15 @@ export default function App() {
             }}
           />
 
-          <div style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "stretch",
-            gap: "10px",
-            width: "100%"
-          }}>
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "stretch",
+              gap: "10px",
+              width: "100%"
+            }}
+          >
             <input
               type={showPassword ? "text" : "password"}
               placeholder="Andika nenosiri hapa"
@@ -1800,10 +2160,11 @@ export default function App() {
     );
   }
 
-  if (!profile) return <p>Inapakia taarifa za mtumiaji...</p>;
+  if (!profile) {
+    return <p>Inapakia taarifa za mtumiaji...</p>;
+  }
 
   // MWONEKANO MKUU
-
   return (
     <main className="app">
       <style>{`
@@ -1893,18 +2254,23 @@ export default function App() {
             setShowNewPassword(false);
           }}
         >
-          {showPasswordPanel ? "FUNGA BADILI PASSWORD" : "BADILI PASSWORD"}
+          {showPasswordPanel
+            ? "FUNGA BADILI PASSWORD"
+            : "BADILI PASSWORD"}
         </button>
 
-        <button type="button" onClick={logout}>TOKA</button>
+        <button type="button" onClick={logout}>
+          TOKA
+        </button>
       </header>
 
       {showPasswordPanel && (
         <section className="record-form">
           <h2>BADILI PASSWORD</h2>
+
           <p>
-            Weka nenosiri jipya la akaunti yako. Nenosiri lazima liwe na
-            angalau herufi au namba 6.
+            Weka nenosiri jipya la akaunti yako. Nenosiri lazima liwe
+            na angalau herufi au namba 6.
           </p>
 
           <form onSubmit={changePassword}>
@@ -1931,13 +2297,19 @@ export default function App() {
 
             <button
               type="button"
-              onClick={() => setShowNewPassword(value => !value)}
+              onClick={() =>
+                setShowNewPassword(value => !value)
+              }
             >
-              {showNewPassword ? "FICHA PASSWORD" : "ONYESHA PASSWORD"}
+              {showNewPassword
+                ? "FICHA PASSWORD"
+                : "ONYESHA PASSWORD"}
             </button>
 
             <button type="submit" disabled={passwordBusy}>
-              {passwordBusy ? "INABADILI..." : "HIFADHI PASSWORD MPYA"}
+              {passwordBusy
+                ? "INABADILI..."
+                : "HIFADHI PASSWORD MPYA"}
             </button>
 
             <button
@@ -1978,12 +2350,15 @@ export default function App() {
       <section>
         {tab === "dashboard" && renderDashboard()}
 
-        {tab === "attendance"
-          ? renderAttendancePage()
-          : configs[tab] && renderFormPage()}
+        {tab === "attendance" && renderAttendancePage()}
+
+        {configs[tab] && renderFormPage()}
 
         {tab === "sms" && renderSMSPage()}
+
         {tab === "reports" && renderReports()}
+
+        {loading && <p>Inapakia taarifa...</p>}
       </section>
 
       <footer>
